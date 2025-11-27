@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tasklist:*)",
+      "Bash(node test-lcu.js:*)",
+      "Bash(node test-game-session.js:*)",
+      "Bash(node:*)",
+      "Bash(npm rebuild:*)",
+      "Bash(sqlite3:*)",
+      "Bash(npx electron:*)",
+      "Bash(taskkill:*)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)",
+      "Bash(npm start)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss init -p)",
+      "Bash(npm run dev:*)",
+      "Bash(netstat:*)",
+      "Bash(npx electron-rebuild:*)",
+      "Bash(set VITE_DEV_SERVER_URL=http://localhost:5173)",
+      "Bash(vite)",
+      "Bash(curl:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run package:*)",
+      "Bash(npx electron-builder:*)",
+      "Bash(tee:*)",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
