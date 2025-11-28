@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from './ui/dialog'
 import { Button } from './ui/button'
-import { Download, X } from 'lucide-react'
+import { Download, X, Sparkles, ArrowRight } from 'lucide-react'
 
 interface UpdateInfo {
   hasUpdate: boolean
@@ -47,53 +47,61 @@ export function UpdateNotification() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[550px] border-primary/20">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Download className="h-5 w-5 text-primary" />
-            Update Available!
+          <DialogTitle className="flex items-center gap-2 text-2xl">
+            <Sparkles className="h-6 w-6 text-primary animate-pulse" />
+            New Update Available!
           </DialogTitle>
-          <DialogDescription>
-            A new version of Rift Revealer is available
+          <DialogDescription className="text-base">
+            A new version of Rift Revealer is ready to download
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">Current Version</p>
-              <p className="font-semibold">{updateInfo.currentVersion}</p>
+          {/* Version comparison with visual upgrade indicator */}
+          <div className="flex items-center justify-center gap-4 p-4 rounded-lg bg-gradient-to-r from-zinc-900 to-zinc-800 border border-zinc-700">
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-1">Current</p>
+              <p className="text-lg font-bold text-zinc-400">v{updateInfo.currentVersion}</p>
             </div>
-            <div>
-              <p className="text-muted-foreground">Latest Version</p>
-              <p className="font-semibold text-primary">{updateInfo.latestVersion}</p>
+            <ArrowRight className="h-5 w-5 text-primary" />
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground mb-1">Latest</p>
+              <p className="text-lg font-bold text-primary">v{updateInfo.latestVersion}</p>
             </div>
           </div>
 
+          {/* Release name with badge */}
           {updateInfo.releaseName && (
-            <div>
-              <p className="text-sm font-semibold mb-1">{updateInfo.releaseName}</p>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-1 text-xs font-semibold bg-primary/10 text-primary rounded">
+                NEW
+              </span>
+              <p className="font-semibold text-foreground">{updateInfo.releaseName}</p>
             </div>
           )}
 
+          {/* Release notes */}
           {updateInfo.releaseNotes && (
-            <div className="max-h-40 overflow-y-auto rounded-md bg-muted p-3">
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                {updateInfo.releaseNotes.slice(0, 300)}
-                {updateInfo.releaseNotes.length > 300 && '...'}
-              </p>
+            <div className="rounded-lg border border-border bg-card p-4 max-h-48 overflow-y-auto">
+              <p className="text-sm text-muted-foreground font-semibold mb-2">What's New:</p>
+              <div className="text-sm text-foreground whitespace-pre-wrap prose prose-invert prose-sm max-w-none">
+                {updateInfo.releaseNotes.slice(0, 400)}
+                {updateInfo.releaseNotes.length > 400 && '...'}
+              </div>
             </div>
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} className="gap-2">
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" onClick={handleClose} className="gap-2">
             <X className="h-4 w-4" />
-            Later
+            Remind Me Later
           </Button>
-          <Button onClick={handleDownload} className="gap-2">
+          <Button onClick={handleDownload} className="gap-2 bg-primary hover:bg-primary/90">
             <Download className="h-4 w-4" />
-            Download Now
+            Download Update
           </Button>
         </DialogFooter>
       </DialogContent>

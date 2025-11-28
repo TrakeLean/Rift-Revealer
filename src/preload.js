@@ -58,5 +58,9 @@ contextBridge.exposeInMainWorld('api', {
     const handler = (event, data) => callback(data);
     ipcRenderer.on('update-available', handler);
     return () => ipcRenderer.removeListener('update-available', handler);
-  }
+  },
+
+  // Auto-start
+  setAutoStart: (enabled) => ipcRenderer.invoke('set-auto-start', enabled),
+  getAutoStart: () => ipcRenderer.invoke('get-auto-start')
 });
