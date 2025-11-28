@@ -43,5 +43,20 @@ contextBridge.exposeInMainWorld('api', {
   removePlayerTag: (puuid, tagType) => ipcRenderer.invoke('remove-player-tag', puuid, tagType),
   removeAllPlayerTags: (puuid) => ipcRenderer.invoke('remove-all-player-tags', puuid),
   getPlayerTags: (puuid) => ipcRenderer.invoke('get-player-tags', puuid),
-  getAllTaggedPlayers: () => ipcRenderer.invoke('get-all-tagged-players')
+  getAllTaggedPlayers: () => ipcRenderer.invoke('get-all-tagged-players'),
+
+  // Window controls
+  windowMinimize: () => ipcRenderer.invoke('window-minimize'),
+  windowMaximize: () => ipcRenderer.invoke('window-maximize'),
+  windowClose: () => ipcRenderer.invoke('window-close'),
+
+  // Update checker
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  setAutoUpdateCheck: (enabled) => ipcRenderer.invoke('set-auto-update-check', enabled),
+  openDownloadUrl: (url) => ipcRenderer.invoke('open-download-url', url),
+  onUpdateAvailable: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('update-available', handler);
+    return () => ipcRenderer.removeListener('update-available', handler);
+  }
 });

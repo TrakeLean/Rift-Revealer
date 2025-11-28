@@ -1,13 +1,15 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const Database = require('./database/db');
 const RiotAPI = require('./api/riotApi');
 const LCUConnector = require('./api/lcuConnector');
+const UpdateChecker = require('./api/updateChecker');
 
 let mainWindow;
 let db;
 let riotApi;
 let lcuConnector;
+let updateChecker;
 let autoMonitorInterval = null;
 
 // Gameflow state machine variables
@@ -53,6 +55,7 @@ function createWindow() {
     width: 1400,
     height: 900,
     icon: iconPath,
+    frame: false, // Remove default title bar
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -117,6 +120,9 @@ app.whenReady().then(() => {
     lcuConnector = new LCUConnector();
     console.log('LCUConnector initialized');
 
+    updateChecker = new UpdateChecker();
+    console.log('UpdateChecker initialized');
+
     console.log('Creating window...');
     createWindow();
     console.log('Window created');
@@ -124,6 +130,9 @@ app.whenReady().then(() => {
     // Auto-start the gameflow monitor
     console.log('Starting gameflow monitor...');
     startGameflowMonitor();
+
+    // Check for updates on startup (if enabled)
+    checkForUpdatesOnStartup();
   } catch (error) {
     console.error('ERROR during initialization:', error);
     dialog.showErrorBox('Initialization Error', `Failed to start app: ${error.message}\n\nStack: ${error.stack}`);
@@ -156,6 +165,24 @@ app.on('before-quit', () => {
 });
 
 // IPC Handlers
+
+// Window control handlers
+ipcMain.handle('window-minimize', () => {
+  mainWindow?.minimize();
+});
+
+ipcMain.handle('window-maximize', () => {
+  if (mainWindow?.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow?.maximize();
+  }
+});
+
+ipcMain.handle('window-close', () => {
+  mainWindow?.close();
+});
+
 ipcMain.handle('get-user-config', async () => {
   return db.getUserConfig();
 });
@@ -702,6 +729,65 @@ ipcMain.handle('get-all-tagged-players', async () => {
     return { success: true, taggedPlayers };
   } catch (error) {
     console.error('Failed to get tagged players:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ========== Update Checker IPC Handlers ==========
+
+/**
+ * Check for updates on startup if enabled
+ */
+async function checkForUpdatesOnStartup() {
+  try {
+    const config = db.getUserConfig();
+    const autoUpdateCheckEnabled = config?.auto_update_check !== 0; // Default to true if not set
+
+    if (autoUpdateCheckEnabled) {
+      console.log('Checking for updates on startup...');
+      const updateInfo = await updateChecker.checkForUpdates();
+
+      if (updateInfo.hasUpdate) {
+        console.log(`Update available: ${updateInfo.latestVersion}`);
+        // Send update notification to renderer
+        mainWindow.webContents.send('update-available', updateInfo);
+      } else {
+        console.log('No updates available');
+      }
+    } else {
+      console.log('Auto-update check is disabled');
+    }
+  } catch (error) {
+    console.error('Error checking for updates on startup:', error);
+  }
+}
+
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    const updateInfo = await updateChecker.checkForUpdates();
+    return { success: true, ...updateInfo };
+  } catch (error) {
+    console.error('Failed to check for updates:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('set-auto-update-check', async (event, enabled) => {
+  try {
+    db.setAutoUpdateCheck(enabled);
+    return { success: true, message: 'Auto-update setting saved' };
+  } catch (error) {
+    console.error('Failed to save auto-update setting:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('open-download-url', async (event, url) => {
+  try {
+    await shell.openExternal(url);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to open download URL:', error);
     return { success: false, error: error.message };
   }
 });

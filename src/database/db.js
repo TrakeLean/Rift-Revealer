@@ -527,6 +527,27 @@ class DatabaseManager {
     return result.count > 0;
   }
 
+  /**
+   * Update auto-update check setting
+   * @param {boolean} enabled
+   */
+  setAutoUpdateCheck(enabled) {
+    // First ensure the column exists (for existing databases)
+    try {
+      const stmt = this.db.prepare(`
+        UPDATE user_config SET auto_update_check = ? WHERE id = (SELECT id FROM user_config ORDER BY id DESC LIMIT 1)
+      `);
+      stmt.run(enabled ? 1 : 0);
+    } catch (error) {
+      // Column might not exist in old schema, add it
+      this.db.exec('ALTER TABLE user_config ADD COLUMN auto_update_check INTEGER DEFAULT 1');
+      const stmt = this.db.prepare(`
+        UPDATE user_config SET auto_update_check = ? WHERE id = (SELECT id FROM user_config ORDER BY id DESC LIMIT 1)
+      `);
+      stmt.run(enabled ? 1 : 0);
+    }
+  }
+
   close() {
     this.db.close();
   }
