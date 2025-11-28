@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const Database = require('./database/db');
 const RiotAPI = require('./api/riotApi');
@@ -9,7 +9,39 @@ let db;
 let riotApi;
 let lcuConnector;
 let autoMonitorInterval = null;
-let lastLobbyHash = null;
+
+// Gameflow state machine variables
+let currentGameflowState = null;
+let lastAnalyzedPlayers = null;
+
+// Queue types that anonymize player names until game starts
+const ANONYMIZED_QUEUES = [420, 440]; // Ranked Solo/Duo, Ranked Flex
+
+// Queue type mappings
+const QUEUE_NAMES = {
+  0: 'Custom',
+  400: 'Normal Draft',
+  420: 'Ranked Solo/Duo',
+  430: 'Normal Blind',
+  440: 'Ranked Flex',
+  450: 'ARAM',
+  700: 'Clash',
+  720: 'ARAM Clash',
+  830: 'Co-op vs AI (Intro)',
+  840: 'Co-op vs AI (Beginner)',
+  850: 'Co-op vs AI (Intermediate)',
+  900: 'URF',
+  1020: 'One for All',
+  1300: 'Nexus Blitz',
+  1400: 'Ultimate Spellbook',
+  1700: 'Arena',
+  1900: 'Pick URF'
+};
+
+// Helper to get queue name
+function getQueueName(queueId) {
+  return QUEUE_NAMES[queueId] || `Queue ${queueId}`;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -25,6 +57,8 @@ function createWindow() {
 
   // Debug: Log environment variable
   console.log('VITE_DEV_SERVER_URL:', process.env.VITE_DEV_SERVER_URL);
+  console.log('__dirname:', __dirname);
+  console.log('app.isPackaged:', app.isPackaged);
 
   // In development, load from Vite dev server
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -34,24 +68,71 @@ function createWindow() {
   } else {
     console.log('Loading from production build');
     // In production, load the built files
-    mainWindow.loadFile(path.join(__dirname, '../dist-renderer/index.html'));
+    // When packaged, __dirname is 'app.asar/src', so we go up one level
+    const htmlPath = path.join(__dirname, '../dist-renderer/index.html');
+    console.log('Loading HTML from:', htmlPath);
+    mainWindow.loadFile(htmlPath)
+      .then(() => {
+        console.log('HTML file loaded successfully');
+      })
+      .catch(err => {
+        console.error('Failed to load HTML file:', err);
+        dialog.showErrorBox('Load Error', `Failed to load application: ${err.message}`);
+      });
   }
+
+  // Log any errors
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('Failed to load:', errorCode, errorDescription);
+    dialog.showErrorBox('Load Failed', `Error ${errorCode}: ${errorDescription}`);
+  });
+
+  mainWindow.webContents.on('dom-ready', () => {
+    console.log('DOM ready');
+  });
 }
 
 app.whenReady().then(() => {
-  db = new Database();
-  db.initialize();
+  console.log('=== APP READY ===');
+  console.log('App path:', app.getAppPath());
+  console.log('User data:', app.getPath('userData'));
+  console.log('Is packaged:', app.isPackaged);
 
-  riotApi = new RiotAPI(db);
-  lcuConnector = new LCUConnector();
+  try {
+    console.log('Initializing database...');
+    db = new Database();
+    console.log('Database object created');
 
-  createWindow();
+    db.initialize();
+    console.log('Database initialized');
+
+    riotApi = new RiotAPI(db);
+    console.log('RiotAPI initialized');
+
+    lcuConnector = new LCUConnector();
+    console.log('LCUConnector initialized');
+
+    console.log('Creating window...');
+    createWindow();
+    console.log('Window created');
+
+    // Auto-start the gameflow monitor
+    console.log('Starting gameflow monitor...');
+    startGameflowMonitor();
+  } catch (error) {
+    console.error('ERROR during initialization:', error);
+    dialog.showErrorBox('Initialization Error', `Failed to start app: ${error.message}\n\nStack: ${error.stack}`);
+    app.quit();
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
+}).catch(err => {
+  console.error('ERROR in app.whenReady:', err);
+  dialog.showErrorBox('Startup Error', `App failed to start: ${err.message}`);
 });
 
 app.on('window-all-closed', () => {
@@ -74,6 +155,48 @@ ipcMain.handle('get-user-config', async () => {
   return db.getUserConfig();
 });
 
+ipcMain.handle('diagnose-database', async () => {
+  try {
+    const config = db.getUserConfig();
+
+    const matchCount = db.db.prepare('SELECT COUNT(*) as count FROM matches').get();
+    const participantCount = db.db.prepare('SELECT COUNT(*) as count FROM match_participants').get();
+    const uniquePlayers = db.db.prepare('SELECT COUNT(DISTINCT summoner_name) as count FROM match_participants').get();
+    const sampleNames = db.db.prepare('SELECT DISTINCT summoner_name FROM match_participants LIMIT 20').all();
+
+    let yourMatches = null;
+    let recentGames = null;
+    if (config) {
+      yourMatches = db.db.prepare('SELECT COUNT(*) as count FROM match_participants WHERE puuid = ?').get(config.puuid);
+      if (yourMatches.count > 0) {
+        recentGames = db.db.prepare(`
+          SELECT m.match_id, mp.champion_name, mp.kills, mp.deaths, mp.assists
+          FROM matches m
+          JOIN match_participants mp ON m.match_id = mp.match_id
+          WHERE mp.puuid = ?
+          ORDER BY m.game_creation DESC
+          LIMIT 5
+        `).all(config.puuid);
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        config,
+        matchCount: matchCount.count,
+        participantCount: participantCount.count,
+        uniquePlayers: uniquePlayers.count,
+        sampleNames: sampleNames.map(p => p.summoner_name),
+        yourMatches: yourMatches?.count || 0,
+        recentGames
+      }
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('save-user-config', async (event, config) => {
   return db.saveUserConfig(config);
 });
@@ -83,9 +206,15 @@ ipcMain.handle('validate-and-save-config', async (event, summonerName, region, a
     riotApi.setApiKey(apiKey);
     const summoner = await riotApi.getSummonerByName(summonerName, region);
 
+    // Use the Riot ID format if available from the API response
+    let finalSummonerName = summonerName;
+    if (summoner.summonerName) {
+      finalSummonerName = summoner.summonerName; // This will be "gameName#tagLine" for Riot IDs
+    }
+
     const config = {
       puuid: summoner.puuid,
-      summoner_name: summonerName,
+      summoner_name: finalSummonerName,
       region: region,
       riot_api_key: apiKey
     };
@@ -97,7 +226,7 @@ ipcMain.handle('validate-and-save-config', async (event, summonerName, region, a
   }
 });
 
-ipcMain.handle('import-match-history', async (event, count = 20) => {
+ipcMain.handle('import-match-history', async (event, count = 100) => {
   try {
     const config = db.getUserConfig();
     if (!config || !config.riot_api_key) {
@@ -105,7 +234,13 @@ ipcMain.handle('import-match-history', async (event, count = 20) => {
     }
 
     riotApi.setApiKey(config.riot_api_key);
-    const result = await riotApi.importMatchHistory(config.puuid, config.region, count);
+
+    // Progress callback that sends updates to renderer
+    const progressCallback = (progress) => {
+      event.sender.send('import-progress', progress);
+    };
+
+    const result = await riotApi.importMatchHistory(config.puuid, config.region, count, progressCallback);
     return { success: true, imported: result };
   } catch (error) {
     return { success: false, error: error.message };
@@ -153,20 +288,55 @@ ipcMain.handle('analyze-lobby', async () => {
     await lcuConnector.connect();
     const lobbyPlayers = await lcuConnector.getLobbyPlayers();
 
+    console.log('=== LOBBY ANALYSIS DEBUG ===');
+    console.log('Your summoner name:', config.summoner_name);
+    console.log('Lobby players:', lobbyPlayers.map(p => p.summonerName));
+
     const analysis = [];
     for (const player of lobbyPlayers) {
-      if (player.summonerName !== config.summoner_name) {
-        const history = db.getPlayerHistory(player.summonerName);
-        if (history.games.length > 0) {
+      // Case-insensitive comparison to avoid missing your own name due to capitalization
+      if (player.summonerName.toLowerCase() !== config.summoner_name.toLowerCase()) {
+        console.log(`Checking history for: ${player.summonerName}`);
+        console.log(`  LCU PUUID: ${player.puuid}`);
+        // Note: Match API and LCU return different PUUID formats, so we must use name matching
+        const history = db.getPlayerHistory(player.summonerName, null);
+        console.log(`  Found ${history.games.length} games`);
+        if (history.games.length > 0 && history.stats) {
+          // Transform games to include isAlly flag
+          const transformedGames = history.games.map(g => ({
+            gameId: g.match_id,
+            champion: g.opponent_champion,
+            role: g.team_position,
+            outcome: g.user_win === 1 ? 'win' : 'loss',
+            kda: {
+              kills: g.opponent_kills,
+              deaths: g.opponent_deaths,
+              assists: g.opponent_assists
+            },
+            timestamp: new Date(g.game_creation),
+            isAlly: g.user_team === g.opponent_team
+          }));
+
           analysis.push({
             player: player.summonerName,
             source: player.source,
-            ...history
+            encounterCount: history.stats.totalGames,
+            wins: history.stats.asEnemy.wins + history.stats.asTeammate.wins,
+            losses: history.stats.asEnemy.losses + history.stats.asTeammate.losses,
+            winRate: Math.round(((history.stats.asEnemy.wins + history.stats.asTeammate.wins) / history.stats.totalGames) * 100),
+            games: transformedGames,
+            // Enhanced stats
+            asEnemy: history.stats.enhanced.asEnemy,
+            asAlly: history.stats.enhanced.asAlly,
+            lastSeen: history.stats.enhanced.lastSeen,
+            threatLevel: history.stats.enhanced.threatLevel,
+            allyQuality: history.stats.enhanced.allyQuality
           });
         }
       }
     }
 
+    console.log(`Total players with history: ${analysis.length}`);
     return { success: true, data: { analysis } };
   } catch (error) {
     // Provide more user-friendly error messages
@@ -184,67 +354,273 @@ ipcMain.handle('analyze-lobby', async () => {
   }
 });
 
-ipcMain.handle('start-auto-monitor', async () => {
+// Helper function to analyze lobby players
+async function analyzeLobbyPlayers(lobbyPlayers) {
+  const config = db.getUserConfig();
+  if (!config || !config.summoner_name) {
+    return;
+  }
+
+  console.log('Lobby players:', lobbyPlayers.map(p => p.summonerName));
+
+  const analysis = [];
+
+  for (const player of lobbyPlayers) {
+    // Case-insensitive comparison to avoid missing your own name due to capitalization
+    if (player.summonerName.toLowerCase() !== config.summoner_name.toLowerCase()) {
+      console.log(`Checking history for: ${player.summonerName}`);
+      // Note: Match API and LCU return different PUUID formats, so we must use name matching
+      const history = db.getPlayerHistory(player.summonerName, null);
+      console.log(`  Found ${history.games.length} games`);
+      if (history.games.length > 0 && history.stats) {
+        // Transform games to include isAlly flag
+        const transformedGames = history.games.map(g => ({
+          gameId: g.match_id,
+          champion: g.opponent_champion,
+          role: g.team_position,
+          outcome: g.user_win === 1 ? 'win' : 'loss',
+          kda: {
+            kills: g.opponent_kills,
+            deaths: g.opponent_deaths,
+            assists: g.opponent_assists
+          },
+          timestamp: new Date(g.game_creation),
+          isAlly: g.user_team === g.opponent_team
+        }));
+
+        analysis.push({
+          player: player.summonerName,
+          source: player.source,
+          encounterCount: history.stats.totalGames,
+          wins: history.stats.asEnemy.wins + history.stats.asTeammate.wins,
+          losses: history.stats.asEnemy.losses + history.stats.asTeammate.losses,
+          winRate: Math.round(((history.stats.asEnemy.wins + history.stats.asTeammate.wins) / history.stats.totalGames) * 100),
+          games: transformedGames,
+          // Enhanced stats
+          asEnemy: history.stats.enhanced.asEnemy,
+          asAlly: history.stats.enhanced.asAlly,
+          lastSeen: history.stats.enhanced.lastSeen,
+          threatLevel: history.stats.enhanced.threatLevel,
+          allyQuality: history.stats.enhanced.allyQuality,
+          byMode: history.stats.enhanced.byMode  // Add mode-specific stats
+        });
+      }
+    }
+  }
+
+  console.log(`Total players with history: ${analysis.length}`);
+
+  // Send update to renderer
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    console.log('📤 Sending lobby-update event to renderer with', analysis.length, 'players');
+    mainWindow.webContents.send('lobby-update', {
+      success: true,
+      data: { analysis }
+    });
+  } else {
+    console.log('⚠️  Cannot send lobby-update: mainWindow not ready');
+  }
+
+  return analysis;
+}
+
+// Function to start gameflow monitoring
+async function startGameflowMonitor() {
   if (autoMonitorInterval) {
+    console.log('Gameflow monitor already running');
     return { success: true, message: 'Already monitoring' };
   }
 
-  // Check if user config exists
-  const config = db.getUserConfig();
-  if (!config || !config.summoner_name) {
-    return {
-      success: false,
-      error: 'No summoner configured. Please configure your settings first.'
-    };
-  }
+  console.log('Starting gameflow monitor...');
 
-  // Test initial connection before starting auto-monitor
-  try {
-    await lcuConnector.connect();
-  } catch (error) {
-    let userMessage = 'League of Legends client is not running. Please launch the game first.';
+  // Don't require config check - just start monitoring silently
+  // The app can monitor gameflow even without user configuration
 
-    if (error.message.includes('credentials not found')) {
-      userMessage = 'Could not connect to League Client. Make sure the game is fully loaded.';
-    }
-
-    return { success: false, error: userMessage };
-  }
-
+  // Gameflow state machine - polls every 3 seconds
   autoMonitorInterval = setInterval(async () => {
     try {
       // Only connect if not already connected
       if (!lcuConnector.credentials) {
         await lcuConnector.connect();
       }
-      const lobbyPlayers = await lcuConnector.getLobbyPlayers();
 
-      // Create a hash of the lobby to detect changes
-      const lobbyHash = lobbyPlayers.map(p => p.summonerName).sort().join(',');
+      // Get current gameflow state
+      const gameflowSession = await lcuConnector.getGameflowSession();
+      const newState = gameflowSession?.phase || 'None';
 
-      if (lobbyHash !== lastLobbyHash && lobbyPlayers.length > 0) {
-        lastLobbyHash = lobbyHash;
+      // Log state transitions
+      if (newState !== currentGameflowState) {
+        console.log(`\n=== GAMEFLOW STATE CHANGE: ${currentGameflowState} -> ${newState} ===`);
+        currentGameflowState = newState;
 
-        const config = db.getUserConfig();
-        const analysis = [];
+        // Send state update to renderer
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('gameflow-state-change', {
+            state: newState,
+            timestamp: Date.now()
+          });
+        }
+      }
 
-        for (const player of lobbyPlayers) {
-          if (player.summonerName !== config.summoner_name) {
-            const history = db.getPlayerHistory(player.summonerName);
-            if (history.games.length > 0) {
-              analysis.push({
-                player: player.summonerName,
-                source: player.source,
-                ...history
+      // State machine logic
+      switch (currentGameflowState) {
+        case 'None':
+        case 'Lobby':
+        case 'Matchmaking':
+        case 'ReadyCheck':
+          // Waiting for champion select - clear any previous analysis
+          lastAnalyzedPlayers = null;
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gameflow-status', {
+              state: currentGameflowState,
+              message: 'Waiting for champion select...',
+              canAnalyze: false
+            });
+          }
+          break;
+
+        case 'ChampSelect': {
+          // In champion select - check if queue is anonymized
+          const champSelect = await lcuConnector.getChampSelect();
+          const queueId = champSelect?.queue?.id || 0;
+          const queueName = getQueueName(queueId);
+          const isAnonymized = ANONYMIZED_QUEUES.includes(queueId);
+
+          if (isAnonymized) {
+            // Ranked queue - names hidden until game starts
+            console.log(`${queueName} (${queueId}) is anonymized - waiting for InProgress state`);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('gameflow-status', {
+                state: 'ChampSelect',
+                message: `${queueName} - names will appear when game starts`,
+                isAnonymized: true,
+                queueId: queueId,
+                queueName: queueName
+              });
+            }
+          } else {
+            // Normal queue - analyze immediately
+            const lobbyPlayers = await lcuConnector.getLobbyPlayers();
+            const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || p.summonerName).sort());
+
+            // Only analyze if players changed
+            if (playerHash !== lastAnalyzedPlayers) {
+              lastAnalyzedPlayers = playerHash;
+              console.log(`=== ANALYZING LOBBY (ChampSelect - ${queueName}) ===`);
+              await analyzeLobbyPlayers(lobbyPlayers);
+            }
+
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('gameflow-status', {
+                state: 'ChampSelect',
+                message: `In champion select - ${queueName}`,
+                canAnalyze: true,
+                queueId: queueId,
+                queueName: queueName
               });
             }
           }
+          break;
         }
 
-        // Send update to renderer
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('lobby-update', { success: true, analysis });
+        case 'InProgress': {
+          // Game has started - analyze if we haven't yet (for ranked queues)
+          if (!lastAnalyzedPlayers) {
+            console.log('=== ANALYZING LOBBY (InProgress - Ranked) ===');
+            const lobbyPlayers = await lcuConnector.getLobbyPlayers();
+            const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || p.summonerName).sort());
+            lastAnalyzedPlayers = playerHash;
+            await analyzeLobbyPlayers(lobbyPlayers);
+          }
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gameflow-status', {
+              state: 'InProgress',
+              message: 'In game - analysis complete',
+              canAnalyze: false
+            });
+          }
+          break;
         }
+
+        case 'EndOfGame':
+          // Game ended - auto-import the game
+          console.log('=== GAME ENDED - AUTO-IMPORTING ===');
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gameflow-status', {
+              state: 'EndOfGame',
+              message: 'Game ended - importing match...',
+              canAnalyze: false
+            });
+          }
+
+          // Auto-import the completed game (import 1 match to get the latest)
+          try {
+            const config = db.getUserConfig();
+            if (config && config.riot_api_key) {
+              riotApi.setApiKey(config.riot_api_key);
+
+              // Wait 10 seconds for Riot to process the game
+              await new Promise(resolve => setTimeout(resolve, 10000));
+
+              console.log('Importing completed game...');
+              const result = await riotApi.importMatchHistory(config.puuid, config.region, 1);
+
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('gameflow-status', {
+                  state: 'EndOfGame',
+                  message: `Game imported! (${result} matches)`,
+                  canAnalyze: false
+                });
+
+                // Notify user
+                mainWindow.webContents.send('game-auto-imported', {
+                  success: true,
+                  imported: result
+                });
+              }
+
+              console.log(`✅ Auto-imported ${result} match(es)`);
+            }
+          } catch (error) {
+            console.error('Auto-import failed:', error.message);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('gameflow-status', {
+                state: 'EndOfGame',
+                message: 'Game ended (auto-import failed)',
+                canAnalyze: false
+              });
+            }
+          }
+
+          lastAnalyzedPlayers = null;
+          break;
+
+        case 'Reconnect':
+          // Player needs to reconnect to game - try to analyze if we haven't
+          console.log('=== RECONNECT STATE ===');
+
+          if (!lastAnalyzedPlayers) {
+            try {
+              const lobbyPlayers = await lcuConnector.getLobbyPlayers();
+              const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || p.summonerName).sort());
+              lastAnalyzedPlayers = playerHash;
+              console.log('=== ANALYZING LOBBY (Reconnect) ===');
+              await analyzeLobbyPlayers(lobbyPlayers);
+            } catch (error) {
+              console.error('Failed to analyze during reconnect:', error.message);
+            }
+          }
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gameflow-status', {
+              state: 'Reconnect',
+              message: 'Reconnecting to game - analysis available',
+              canAnalyze: true
+            });
+          }
+          break;
       }
     } catch (error) {
       // Reset credentials on connection error so we retry connecting next time
@@ -254,13 +630,18 @@ ipcMain.handle('start-auto-monitor', async () => {
   }, 3000); // Check every 3 seconds
 
   return { success: true, message: 'Auto-monitoring started' };
+}
+
+// IPC handler now calls the standalone function
+ipcMain.handle('start-auto-monitor', async () => {
+  return await startGameflowMonitor();
 });
 
 ipcMain.handle('stop-auto-monitor', async () => {
   if (autoMonitorInterval) {
     clearInterval(autoMonitorInterval);
     autoMonitorInterval = null;
-    lastLobbyHash = null;
+    lastAnalyzedPlayers = null;
   }
   return { success: true, message: 'Auto-monitoring stopped' };
 });

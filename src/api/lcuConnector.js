@@ -157,6 +157,7 @@ class LCUConnector {
 
             players.push({
               summonerId: team.summonerId,
+              puuid: summoner.puuid,
               summonerName: summonerName,
               championId: team.championId,
               cellId: team.cellId,
@@ -195,6 +196,7 @@ class LCUConnector {
 
         players.push({
           summonerId: player.summonerId,
+          puuid: summoner ? summoner.puuid : null,
           summonerName: summonerName,
           championId: player.championId,
           teamId: player.teamId,
