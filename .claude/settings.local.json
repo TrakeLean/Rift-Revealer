@@ -41,7 +41,12 @@
       "Bash(npx asar:*)",
       "Bash(if [ -f \"nul\" ])",
       "Bash(then rm nul)",
-      "Bash(npx shadcn@latest add:*)"
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch:*)",
+      "Bash(git stash:*)",
+      "Bash(git stash pop:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git tag:*)"
     ],
     "deny": [],
     "ask": []

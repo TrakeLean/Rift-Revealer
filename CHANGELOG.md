@@ -5,6 +5,12 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-01-28
+
+### Fixed
+- GitHub Actions build workflow now uses Node.js 20 (required for Vite 7)
+- Added package-lock.json to repository for npm caching in CI/CD
+
 ## [1.1.0] - 2025-01-28
 
 ### Added
