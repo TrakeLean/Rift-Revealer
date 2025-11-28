@@ -3,9 +3,10 @@ import { Settings as SettingsPage } from './pages/Settings'
 import { MatchHistory } from './pages/MatchHistory'
 import { LobbyAnalysis } from './pages/LobbyAnalysis'
 import { Button } from './components/ui/button'
-import { Home, Settings, History } from 'lucide-react'
+import { Home, Settings, History, Minus, Square, X } from 'lucide-react'
 import { cn } from './lib/utils'
 import ErrorBoundary from './components/ErrorBoundary'
+import { UpdateNotification } from './components/UpdateNotification'
 
 type Page = 'lobby' | 'history' | 'settings'
 
@@ -18,11 +19,26 @@ function App() {
     { id: 'settings' as Page, label: 'Settings', icon: Settings },
   ]
 
+  const handleMinimize = () => {
+    window.api.windowMinimize();
+  };
+
+  const handleMaximize = () => {
+    window.api.windowMaximize();
+  };
+
+  const handleClose = () => {
+    window.api.windowClose();
+  };
+
   return (
     <div className="min-h-screen bg-background flex">
+      {/* Update Notification Dialog */}
+      <UpdateNotification />
+
       {/* Sidebar Navigation */}
       <aside className="w-64 border-r border-border bg-card flex flex-col">
-        <div className="p-6">
+        <div className="p-6" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
           <h1 className="text-2xl font-bold">Rift Revealer</h1>
           <p className="text-xs text-muted-foreground mt-1">
             League of Legends Encounter Tracker
@@ -67,15 +83,41 @@ function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-6">
-          {/* Page Header */}
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold">
-              {navigationItems.find((item) => item.id === currentPage)?.label}
-            </h2>
-          </div>
+      <main className="flex-1 flex flex-col">
+        {/* Draggable top bar with window controls */}
+        <div className="flex items-center justify-between px-6 pt-3 pb-2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+          <h2 className="text-2xl font-bold">
+            {navigationItems.find((item) => item.id === currentPage)?.label}
+          </h2>
 
+          {/* Window controls - non-draggable */}
+          <div className="flex items-center" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+            <button
+              onClick={handleMinimize}
+              className="h-8 w-10 flex items-center justify-center hover:bg-zinc-800 transition-colors rounded"
+              aria-label="Minimize"
+            >
+              <Minus className="w-4 h-4 text-zinc-400" />
+            </button>
+            <button
+              onClick={handleMaximize}
+              className="h-8 w-10 flex items-center justify-center hover:bg-zinc-800 transition-colors rounded"
+              aria-label="Maximize"
+            >
+              <Square className="w-3.5 h-3.5 text-zinc-400" />
+            </button>
+            <button
+              onClick={handleClose}
+              className="h-8 w-10 flex items-center justify-center hover:bg-red-600 transition-colors rounded group"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-auto px-6 pb-6">
           {/* Page Content */}
           <ErrorBoundary key={currentPage}>
             {currentPage === 'lobby' && <LobbyAnalysis />}

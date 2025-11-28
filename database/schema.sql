@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS user_config (
     summoner_name TEXT NOT NULL,
     region TEXT NOT NULL,
     riot_api_key TEXT,
-    last_updated INTEGER
+    last_updated INTEGER,
+    auto_update_check INTEGER DEFAULT 1
 );
 
 -- Players table
