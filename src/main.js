@@ -791,3 +791,34 @@ ipcMain.handle('open-download-url', async (event, url) => {
     return { success: false, error: error.message };
   }
 });
+
+// ========== Auto-Start IPC Handlers ==========
+
+ipcMain.handle('set-auto-start', async (event, enabled) => {
+  try {
+    // Save to database
+    db.setAutoStart(enabled);
+
+    // Update Windows auto-start setting
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      openAsHidden: false,
+      args: []
+    });
+
+    return { success: true, message: 'Auto-start setting saved' };
+  } catch (error) {
+    console.error('Failed to save auto-start setting:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-auto-start', async () => {
+  try {
+    const enabled = db.getAutoStart();
+    return { success: true, enabled };
+  } catch (error) {
+    console.error('Failed to get auto-start setting:', error);
+    return { success: false, error: error.message };
+  }
+});

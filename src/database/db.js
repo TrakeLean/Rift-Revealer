@@ -548,6 +548,40 @@ class DatabaseManager {
     }
   }
 
+  /**
+   * Update auto-start setting
+   * @param {boolean} enabled
+   */
+  setAutoStart(enabled) {
+    // First ensure the column exists (for existing databases)
+    try {
+      const stmt = this.db.prepare(`
+        UPDATE user_config SET auto_start = ? WHERE id = (SELECT id FROM user_config ORDER BY id DESC LIMIT 1)
+      `);
+      stmt.run(enabled ? 1 : 0);
+    } catch (error) {
+      // Column might not exist in old schema, add it
+      this.db.exec('ALTER TABLE user_config ADD COLUMN auto_start INTEGER DEFAULT 0');
+      const stmt = this.db.prepare(`
+        UPDATE user_config SET auto_start = ? WHERE id = (SELECT id FROM user_config ORDER BY id DESC LIMIT 1)
+      `);
+      stmt.run(enabled ? 1 : 0);
+    }
+  }
+
+  /**
+   * Get auto-start setting
+   * @returns {boolean}
+   */
+  getAutoStart() {
+    try {
+      const config = this.getUserConfig();
+      return config?.auto_start === 1;
+    } catch (error) {
+      return false;
+    }
+  }
+
   close() {
     this.db.close();
   }

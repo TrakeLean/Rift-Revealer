@@ -77,7 +77,7 @@ function App() {
             />
           </div>
           <p className="text-xs text-muted-foreground text-center">
-            V1.1.0 - Made by 0xTrk
+            V1.2.0 - Made by 0xTrk
           </p>
         </div>
       </aside>

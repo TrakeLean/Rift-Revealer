@@ -20,11 +20,13 @@ export function Settings({ onConfigSaved }: SettingsProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [autoUpdateCheck, setAutoUpdateCheck] = useState(true)
+  const [autoStart, setAutoStart] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<string | null>(null)
 
   useEffect(() => {
     loadConfig()
+    loadAutoStart()
   }, [])
 
   const loadConfig = async () => {
@@ -42,6 +44,17 @@ export function Settings({ onConfigSaved }: SettingsProps) {
     }
   }
 
+  const loadAutoStart = async () => {
+    try {
+      const result = await window.api.getAutoStart()
+      if (result.success) {
+        setAutoStart(result.enabled)
+      }
+    } catch (error) {
+      console.error('Failed to load auto-start setting:', error)
+    }
+  }
+
   const handleAutoUpdateToggle = async (checked: boolean) => {
     setAutoUpdateCheck(checked)
     try {
@@ -50,6 +63,17 @@ export function Settings({ onConfigSaved }: SettingsProps) {
       console.error('Failed to save auto-update setting:', error)
       // Revert on error
       setAutoUpdateCheck(!checked)
+    }
+  }
+
+  const handleAutoStartToggle = async (checked: boolean) => {
+    setAutoStart(checked)
+    try {
+      await window.api.setAutoStart(checked)
+    } catch (error) {
+      console.error('Failed to save auto-start setting:', error)
+      // Revert on error
+      setAutoStart(!checked)
     }
   }
 
@@ -237,15 +261,30 @@ export function Settings({ onConfigSaved }: SettingsProps) {
         </CardContent>
       </Card>
 
-      {/* Update Settings Card */}
+      {/* App Behavior Card */}
       <Card>
         <CardHeader>
-          <CardTitle>App Updates</CardTitle>
+          <CardTitle>App Behavior</CardTitle>
           <CardDescription>
-            Manage automatic update checks and download new versions
+            Configure how the app behaves on startup
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Auto-start toggle */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="auto-start">Start on Windows Startup</Label>
+              <p className="text-xs text-muted-foreground">
+                Automatically launch Rift Revealer when Windows starts
+              </p>
+            </div>
+            <Switch
+              id="auto-start"
+              checked={autoStart}
+              onCheckedChange={handleAutoStartToggle}
+            />
+          </div>
+
           {/* Auto-update toggle */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
@@ -262,27 +301,35 @@ export function Settings({ onConfigSaved }: SettingsProps) {
           </div>
 
           {/* Manual check button */}
-          <div className="pt-2">
-            <Button
-              variant="outline"
-              onClick={handleCheckForUpdates}
-              disabled={isCheckingUpdate}
-              className="gap-2"
-            >
-              {isCheckingUpdate ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  Checking...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4" />
-                  Check for Updates
-                </>
-              )}
-            </Button>
+          <div className="pt-2 space-y-3">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleCheckForUpdates}
+                disabled={isCheckingUpdate}
+                className="gap-2"
+              >
+                {isCheckingUpdate ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Check for Updates
+                  </>
+                )}
+              </Button>
+            </div>
             {updateStatus && (
-              <p className="text-sm text-muted-foreground mt-2">{updateStatus}</p>
+              <div className={`text-sm p-3 rounded-md ${
+                updateStatus.includes('available')
+                  ? 'bg-primary/10 text-primary border border-primary/20'
+                  : 'bg-muted text-muted-foreground'
+              }`}>
+                {updateStatus}
+              </div>
             )}
           </div>
         </CardContent>

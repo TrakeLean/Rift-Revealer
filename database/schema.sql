@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS user_config (
     region TEXT NOT NULL,
     riot_api_key TEXT,
     last_updated INTEGER,
-    auto_update_check INTEGER DEFAULT 1
+    auto_update_check INTEGER DEFAULT 1,
+    auto_start INTEGER DEFAULT 0
 );
 
 -- Players table
