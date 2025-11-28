@@ -45,61 +45,52 @@ export function ModeStatsRow({ byMode }: ModeStatsRowProps) {
   if (modesWithGames.length === 0) return null
 
   return (
-    <div className="space-y-2">
-      <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wide">
-        By Game Mode
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {modesWithGames.map(([mode, stats]) => {
-          const config = MODE_CONFIG[mode as GameMode]
-          const Icon = config.icon
-          const hasEnemy = stats.asEnemy && stats.asEnemy.games > 0
-          const hasAlly = stats.asAlly && stats.asAlly.games > 0
+    <div className="flex flex-wrap gap-2">
+      {modesWithGames.map(([mode, stats]) => {
+        const config = MODE_CONFIG[mode as GameMode]
+        const Icon = config.icon
+        const hasEnemy = stats.asEnemy && stats.asEnemy.games > 0
+        const hasAlly = stats.asAlly && stats.asAlly.games > 0
 
-          return (
-            <div
-              key={mode}
-              className="flex-1 min-w-[140px] px-3 py-2 rounded-md border bg-card/50 border-border/50"
-            >
-              {/* Mode header */}
-              <div className="flex items-center gap-1.5 mb-2">
-                <Icon className={cn('h-3.5 w-3.5', config.color)} />
-                <span className="text-xs font-medium">{config.label}</span>
-              </div>
-
-              {/* Stats */}
-              <div className="flex gap-2 text-[11px]">
-                {hasEnemy && (
-                  <div className="flex-1">
-                    <div className="text-[9px] text-red-400/70 uppercase mb-0.5">vs</div>
-                    <div className={cn(
-                      'font-medium',
-                      stats.asEnemy!.winRate >= 60 ? 'text-emerald-400' :
-                      stats.asEnemy!.winRate <= 40 ? 'text-red-400' :
-                      'text-slate-300'
-                    )}>
-                      {stats.asEnemy!.wins}-{stats.asEnemy!.losses}
-                    </div>
-                  </div>
-                )}
-                {hasAlly && (
-                  <div className="flex-1">
-                    <div className="text-[9px] text-blue-400/70 uppercase mb-0.5">w/</div>
-                    <div className={cn(
-                      'font-medium',
-                      stats.asAlly!.winRate >= 60 ? 'text-emerald-400' :
-                      stats.asAlly!.winRate <= 40 ? 'text-red-400' :
-                      'text-slate-300'
-                    )}>
-                      {stats.asAlly!.wins}-{stats.asAlly!.losses}
-                    </div>
-                  </div>
-                )}
-              </div>
+        return (
+          <div
+            key={mode}
+            className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border bg-card/50 border-border/50"
+          >
+            {/* Mode icon & label */}
+            <div className="flex items-center gap-1.5">
+              <Icon className={cn('h-3.5 w-3.5', config.color)} />
+              <span className="text-xs font-medium text-muted-foreground">{config.label}:</span>
             </div>
-          )
-        })}
-      </div>
+
+            {/* Compact stats */}
+            <div className="flex items-center gap-2 text-xs font-medium">
+              {hasEnemy && (
+                <span className={cn(
+                  stats.asEnemy!.winRate >= 60 ? 'text-emerald-400' :
+                  stats.asEnemy!.winRate <= 40 ? 'text-red-400' :
+                  'text-slate-300'
+                )}>
+                  {stats.asEnemy!.wins}-{stats.asEnemy!.losses}
+                </span>
+              )}
+              {hasEnemy && hasAlly && (
+                <span className="text-muted-foreground/50">|</span>
+              )}
+              {hasAlly && (
+                <span className={cn(
+                  'opacity-70',
+                  stats.asAlly!.winRate >= 60 ? 'text-emerald-400' :
+                  stats.asAlly!.winRate <= 40 ? 'text-red-400' :
+                  'text-slate-300'
+                )}>
+                  {stats.asAlly!.wins}-{stats.asAlly!.losses}
+                </span>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

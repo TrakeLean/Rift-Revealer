@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS players (
     puuid TEXT PRIMARY KEY,
     summoner_name TEXT NOT NULL,
     region TEXT NOT NULL,
-    last_seen INTEGER
+    last_seen INTEGER,
+    profile_icon_id INTEGER
 );
 
 -- Matches table
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS match_participants (
     role TEXT,
     lane TEXT,
     team_position TEXT,
+    profile_icon_id INTEGER,
     FOREIGN KEY (match_id) REFERENCES matches(match_id),
     FOREIGN KEY (puuid) REFERENCES players(puuid)
 );

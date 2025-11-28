@@ -364,7 +364,8 @@ ipcMain.handle('analyze-lobby', async () => {
             lastSeen: history.stats.enhanced.lastSeen,
             threatLevel: history.stats.enhanced.threatLevel,
             allyQuality: history.stats.enhanced.allyQuality,
-            byMode: history.stats.enhanced.byMode
+            byMode: history.stats.enhanced.byMode,
+            profileIconId: history.stats.enhanced.profileIconId
           });
         }
       }
@@ -392,10 +393,12 @@ ipcMain.handle('analyze-lobby', async () => {
 async function analyzeLobbyPlayers(lobbyPlayers) {
   const config = db.getUserConfig();
   if (!config || !config.summoner_name) {
+    console.log('⚠️  Cannot analyze: No user configuration found. Please configure your summoner name in Settings.');
     return;
   }
 
   console.log('Lobby players:', lobbyPlayers.map(p => p.summonerName));
+  console.log('Your summoner name (from config):', config.summoner_name);
 
   const analysis = [];
 
@@ -437,13 +440,19 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
           lastSeen: history.stats.enhanced.lastSeen,
           threatLevel: history.stats.enhanced.threatLevel,
           allyQuality: history.stats.enhanced.allyQuality,
-          byMode: history.stats.enhanced.byMode  // Add mode-specific stats
+          byMode: history.stats.enhanced.byMode,  // Add mode-specific stats
+          profileIconId: history.stats.enhanced.profileIconId  // Add profile icon
         });
       }
     }
   }
 
   console.log(`Total players with history: ${analysis.length}`);
+
+  if (analysis.length === 0) {
+    console.log('ℹ️  No players from your match history found in this lobby');
+    console.log('   Make sure you have imported your match history from the Match History page');
+  }
 
   // Send update to renderer
   if (mainWindow && !mainWindow.isDestroyed()) {
