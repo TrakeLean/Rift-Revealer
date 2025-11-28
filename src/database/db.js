@@ -32,6 +32,31 @@ class DatabaseManager {
     const schema = fs.readFileSync(schemaPath, 'utf8');
     this.db.exec(schema);
     console.log('Database schema initialized');
+
+    // Run migrations for existing databases
+    this.runMigrations();
+  }
+
+  runMigrations() {
+    // Check if profile_icon_id column exists in players table
+    const playersInfo = this.db.prepare("PRAGMA table_info(players)").all();
+    const hasProfileIconInPlayers = playersInfo.some(col => col.name === 'profile_icon_id');
+
+    if (!hasProfileIconInPlayers) {
+      console.log('Running migration: Adding profile_icon_id to players table');
+      this.db.exec('ALTER TABLE players ADD COLUMN profile_icon_id INTEGER');
+    }
+
+    // Check if profile_icon_id column exists in match_participants table
+    const participantsInfo = this.db.prepare("PRAGMA table_info(match_participants)").all();
+    const hasProfileIconInParticipants = participantsInfo.some(col => col.name === 'profile_icon_id');
+
+    if (!hasProfileIconInParticipants) {
+      console.log('Running migration: Adding profile_icon_id to match_participants table');
+      this.db.exec('ALTER TABLE match_participants ADD COLUMN profile_icon_id INTEGER');
+    }
+
+    console.log('Database migrations completed');
   }
 
   getUserConfig() {
@@ -53,12 +78,12 @@ class DatabaseManager {
     );
   }
 
-  savePlayer(puuid, summonerName, region) {
+  savePlayer(puuid, summonerName, region, profileIconId = null) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO players (puuid, summoner_name, region, last_seen)
-      VALUES (?, ?, ?, ?)
+      INSERT OR REPLACE INTO players (puuid, summoner_name, region, last_seen, profile_icon_id)
+      VALUES (?, ?, ?, ?, ?)
     `);
-    return stmt.run(puuid, summonerName, region, Date.now());
+    return stmt.run(puuid, summonerName, region, Date.now(), profileIconId);
   }
 
   saveMatch(matchData) {
@@ -91,8 +116,8 @@ class DatabaseManager {
       INSERT INTO match_participants (
         match_id, puuid, summoner_name, champion_name, champion_id, team_id,
         kills, deaths, assists, win, total_damage_dealt, total_damage_to_champions,
-        total_minions_killed, gold_earned, role, lane, team_position
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        total_minions_killed, gold_earned, role, lane, team_position, profile_icon_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const participant of matchData.info.participants) {
@@ -123,7 +148,7 @@ class DatabaseManager {
         console.error('   participant.puuid:', participant.puuid);
       }
 
-      this.savePlayer(participant.puuid, summonerName, matchData.info.platformId);
+      this.savePlayer(participant.puuid, summonerName, matchData.info.platformId, participant.profileIconId);
 
       participantStmt.run(
         matchData.metadata.matchId,
@@ -142,7 +167,8 @@ class DatabaseManager {
         participant.goldEarned,
         participant.role,
         participant.lane,
-        participant.teamPosition
+        participant.teamPosition,
+        participant.profileIconId || null
       );
     }
   }
@@ -185,6 +211,7 @@ class DatabaseManager {
           opponent.assists as opponent_assists,
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
+          opponent.profile_icon_id as opponent_profile_icon,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
@@ -235,6 +262,7 @@ class DatabaseManager {
           opponent.assists as opponent_assists,
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
+          opponent.profile_icon_id as opponent_profile_icon,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
@@ -406,6 +434,9 @@ class DatabaseManager {
       isAlly
     };
 
+    // Get profile icon from most recent game
+    const profileIconId = lastGame.opponent_profile_icon || null;
+
     // Calculate mode-specific stats
     const byMode = {};
     Object.keys(gamesByMode).forEach(mode => {
@@ -439,7 +470,8 @@ class DatabaseManager {
           lastSeen,
           threatLevel,
           allyQuality,
-          byMode  // Add mode-specific stats
+          byMode,  // Add mode-specific stats
+          profileIconId  // Add profile icon
         }
       }
     };

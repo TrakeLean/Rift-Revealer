@@ -106,6 +106,7 @@ export interface AnalysisResult {
   threatLevel?: 'high' | 'medium' | 'low' // Based on enemy WR
   allyQuality?: 'good' | 'average' | 'poor' // Based on ally WR
   byMode?: Record<GameMode, ModeStats> // Stats grouped by game mode
+  profileIconId?: number | null // Profile icon from Riot
 }
 
 // IPC Response Types

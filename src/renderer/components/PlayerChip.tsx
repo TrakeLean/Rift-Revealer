@@ -36,6 +36,7 @@ interface PlayerChipProps {
   threatLevel?: 'high' | 'medium' | 'low'
   allyQuality?: 'good' | 'average' | 'poor'
   byMode?: Record<GameMode, ModeStats>
+  profileIconId?: number | null
 }
 
 export function PlayerChip({
@@ -54,6 +55,7 @@ export function PlayerChip({
   threatLevel,
   allyQuality,
   byMode,
+  profileIconId,
 }: PlayerChipProps) {
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
   const [playerTags, setPlayerTags] = useState<any[]>([])
@@ -128,24 +130,37 @@ export function PlayerChip({
       )}
       onClick={onClick}
     >
-      <CardContent className="p-4">
-        <div className="space-y-3">
-          {/* Header - Player Name & Total Games */}
-          <div className="flex items-start justify-between gap-4">
+      <CardContent className="p-3">
+        <div className="space-y-2.5">
+          {/* Header - Player Name & Total Games - Single Line */}
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="text-base font-medium truncate">{summonerName}</span>
+              {/* Profile Icon */}
+              {profileIconId ? (
+                <img
+                  src={`https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/${profileIconId}.png`}
+                  alt={`${summonerName}'s profile icon`}
+                  className="h-8 w-8 rounded-full border-2 border-border flex-shrink-0"
+                  onError={(e) => {
+                    // Fallback to user icon if image fails to load
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+              ) : null}
+              <User className={cn("h-4 w-4 text-muted-foreground flex-shrink-0", profileIconId && "hidden")} />
+              <span className="text-base font-semibold truncate">{summonerName}</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 flex-shrink-0"
+                className="h-6 w-6"
                 onClick={handleTagButtonClick}
                 title="Tag player"
               >
                 <Tag className={cn(
-                  "h-4 w-4",
+                  "h-3.5 w-3.5",
                   playerTags.length > 0 ? "text-primary" : "text-muted-foreground"
                 )} />
               </Button>
@@ -156,91 +171,74 @@ export function PlayerChip({
             </div>
           </div>
 
-          {/* Enhanced Stats Row */}
+          {/* Enhanced Stats Row - Horizontal, Larger Text */}
           {(asEnemy || asAlly) && (
-            <div className="flex gap-3 text-xs">
+            <div className="flex gap-4 text-sm">
               {/* Enemy Stats */}
               {asEnemy && asEnemy.games > 0 && (
-                <div className={cn(
-                  "flex-1 px-3 py-2 rounded-md border",
-                  "bg-red-950/20 border-red-900/30"
-                )}>
-                  <div className="text-[10px] text-red-400/70 uppercase font-medium mb-1">
-                    vs Enemy
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className={cn("font-semibold", getThreatColor(threatLevel))}>
-                      {asEnemy.wins}-{asEnemy.losses}
-                    </span>
-                    <span className={cn("text-[10px]", getThreatColor(threatLevel))}>
-                      ({asEnemy.winRate}%)
-                    </span>
-                  </div>
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-xs text-red-400/70 uppercase font-medium">vs Enemy:</span>
+                  <span className={cn("font-bold", getThreatColor(threatLevel))}>
+                    {asEnemy.wins}-{asEnemy.losses}
+                  </span>
+                  <span className={cn("text-xs", getThreatColor(threatLevel))}>
+                    ({asEnemy.winRate}%)
+                  </span>
                 </div>
               )}
 
               {/* Ally Stats */}
               {asAlly && asAlly.games > 0 && (
-                <div className={cn(
-                  "flex-1 px-3 py-2 rounded-md border",
-                  "bg-emerald-950/20 border-emerald-900/30"
-                )}>
-                  <div className="text-[10px] text-emerald-400/70 uppercase font-medium mb-1">
-                    as Ally
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className={cn("font-semibold", getAllyColor(allyQuality))}>
-                      {asAlly.wins}-{asAlly.losses}
-                    </span>
-                    <span className={cn("text-[10px]", getAllyColor(allyQuality))}>
-                      ({asAlly.winRate}%)
-                    </span>
-                  </div>
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-xs text-emerald-400/70 uppercase font-medium">as Ally:</span>
+                  <span className={cn("font-bold", getAllyColor(allyQuality))}>
+                    {asAlly.wins}-{asAlly.losses}
+                  </span>
+                  <span className={cn("text-xs", getAllyColor(allyQuality))}>
+                    ({asAlly.winRate}%)
+                  </span>
                 </div>
               )}
             </div>
           )}
 
-          {/* Last Seen Info */}
-          {lastSeen && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{formatTimeAgo(lastSeen.timestamp)}</span>
-              <span>•</span>
-              <span className="font-medium text-foreground/80">{lastSeen.champion}</span>
-              {lastSeen.role && (
-                <>
-                  <span>•</span>
-                  <span className="capitalize">{lastSeen.role}</span>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Mode-Specific Stats */}
+          {/* Mode-Specific Stats - Compact Badges */}
           <ModeStatsRow byMode={byMode} />
 
-          {/* Tags */}
-          {playerTags.length > 0 && (
-            <div className="flex gap-1.5 flex-wrap">
-              {playerTags.map((tag, idx) => (
-                <TagPill
-                  key={idx}
-                  label={
-                    tag.tag_type === 'toxic' ? 'Toxic' :
-                    tag.tag_type === 'friendly' ? 'Friendly' :
-                    tag.tag_type === 'notable' ? 'Notable' :
-                    'Duo'
-                  }
-                  variant={
-                    tag.tag_type === 'toxic' ? 'toxic' :
-                    tag.tag_type === 'friendly' ? 'positive' :
-                    tag.tag_type === 'notable' ? 'notable' :
-                    'info'
-                  }
-                />
-              ))}
-            </div>
-          )}
+          {/* Tags & Last Seen - Single Row */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            {/* Tags */}
+            {playerTags.length > 0 && (
+              <div className="flex gap-1.5 flex-wrap">
+                {playerTags.map((tag, idx) => (
+                  <TagPill
+                    key={idx}
+                    label={
+                      tag.tag_type === 'toxic' ? 'Toxic' :
+                      tag.tag_type === 'friendly' ? 'Friendly' :
+                      tag.tag_type === 'notable' ? 'Notable' :
+                      'Duo'
+                    }
+                    variant={
+                      tag.tag_type === 'toxic' ? 'toxic' :
+                      tag.tag_type === 'friendly' ? 'positive' :
+                      tag.tag_type === 'notable' ? 'notable' :
+                      'info'
+                    }
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Last Seen Info */}
+            {lastSeen && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground ml-auto">
+                <span>{formatTimeAgo(lastSeen.timestamp)}</span>
+                <span>•</span>
+                <span className="font-medium text-foreground/80">{lastSeen.champion}</span>
+              </div>
+            )}
+          </div>
         </div>
       </CardContent>
 

@@ -264,6 +264,7 @@ export function LobbyAnalysis() {
                     threatLevel={player.threatLevel}
                     allyQuality={player.allyQuality}
                     byMode={player.byMode}
+                    profileIconId={player.profileIconId}
                     onClick={() => togglePlayerExpansion(player.player)}
                   />
 
