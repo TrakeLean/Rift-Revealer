@@ -17,7 +17,10 @@ Desktop app that automatically monitors League of Legends lobbies and shows your
 ✅ **lol-modern-ui Skill** - ALL UI components MUST follow this design system (`.claude/skills/lol-modern-ui/SKILL.md`)
 ✅ **Auto-monitoring** - App automatically starts gameflow monitoring on launch (no manual buttons)
 ✅ **Mode-specific stats** - Player history split by queue type (Ranked, Normal, ARAM, Arena, Other)
+✅ **Compact UI** - Redesigned player cards ~40% smaller with larger, more readable stats
+✅ **Profile icons** - Riot profile icons displayed next to player names
 ✅ **Database in writable location** - Uses `app.getPath('userData')` to avoid asar read-only issues
+✅ **GitHub Actions** - Automatic builds and releases when tags are pushed
 
 **Key Files:**
 - `.claude/skills/lol-modern-ui/SKILL.md` - **MANDATORY** UI design system (dark theme, esports aesthetic)
@@ -33,9 +36,12 @@ Desktop app that automatically monitors League of Legends lobbies and shows your
 ✅ Auto-monitoring working
 ✅ Logo added to sidebar
 ✅ Enhanced player cards with threat indicators
-✅ All changes committed and pushed to GitHub (commit `43d11e1`)
-✅ Windows executables built in `dist/` folder
-✅ DEVELOPMENT.md created for context preservation
+✅ **v1.3.0 released** - Compact UI redesign with profile icons
+✅ GitHub Actions workflow for automatic builds
+✅ Profile icon system fully integrated with database migration
+✅ Improved logging for better debugging
+✅ All changes committed and pushed to GitHub (commit `a2fbb94`)
+✅ Windows executables built and released
 🎯 **Ready for next session** - All context documented, no pending work
 
 ---
