@@ -84,6 +84,7 @@ export type GameMode = 'Ranked' | 'Normal' | 'ARAM' | 'Arena' | 'Other'
 // Enhanced Analysis Result
 export interface AnalysisResult {
   player: string
+  puuid: string
   source: string
   encounterCount: number
   wins: number
@@ -150,6 +151,13 @@ export interface WindowAPI {
     canAnalyze?: boolean
   }) => void) => () => void
   onGameAutoImported: (callback: (data: { success: boolean; imported: number }) => void) => () => void
+
+  // Player tagging methods
+  addPlayerTag: (puuid: string, summonerName: string, tagType: string, note: string | null) => Promise<IPCResponse>
+  removePlayerTag: (puuid: string, tagType: string) => Promise<IPCResponse>
+  removeAllPlayerTags: (puuid: string) => Promise<IPCResponse>
+  getPlayerTags: (puuid: string) => Promise<IPCResponse<any[]>>
+  getAllTaggedPlayers: () => Promise<IPCResponse<any[]>>
 }
 
 declare global {

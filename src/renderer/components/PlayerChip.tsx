@@ -1,8 +1,11 @@
+import { useState, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { TagPill } from './TagPill'
 import { ModeStatsRow } from './ModeStatsRow'
+import { PlayerTagMenu } from './PlayerTagMenu'
 import { cn } from '@/lib/utils'
-import { User, ChevronDown } from 'lucide-react'
+import { User, ChevronDown, Tag } from 'lucide-react'
 import type { SplitStats, GameMode, ModeStats } from '../types'
 
 interface PlayerTag {
@@ -11,6 +14,7 @@ interface PlayerTag {
 }
 
 interface PlayerChipProps {
+  puuid: string
   summonerName: string
   encounterCount: number
   tags?: PlayerTag[]
@@ -18,6 +22,7 @@ interface PlayerChipProps {
   losses?: number
   onClick?: () => void
   className?: string
+  onTagsUpdated?: () => void
   // Enhanced stats
   asEnemy?: SplitStats
   asAlly?: SplitStats
@@ -34,6 +39,7 @@ interface PlayerChipProps {
 }
 
 export function PlayerChip({
+  puuid,
   summonerName,
   encounterCount,
   tags = [],
@@ -41,6 +47,7 @@ export function PlayerChip({
   losses = 0,
   onClick,
   className,
+  onTagsUpdated,
   asEnemy,
   asAlly,
   lastSeen,
@@ -48,6 +55,38 @@ export function PlayerChip({
   allyQuality,
   byMode,
 }: PlayerChipProps) {
+  const [tagMenuOpen, setTagMenuOpen] = useState(false)
+  const [playerTags, setPlayerTags] = useState<any[]>([])
+
+  // Load tags for this player
+  const loadTags = async () => {
+    try {
+      const result = await window.api.getPlayerTags(puuid)
+      if (result.success) {
+        setPlayerTags(result.tags)
+      }
+    } catch (error) {
+      console.error('Failed to load tags:', error)
+    }
+  }
+
+  const handleTagsUpdated = () => {
+    loadTags()
+    if (onTagsUpdated) {
+      onTagsUpdated()
+    }
+  }
+
+  const handleTagButtonClick = (e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent card onClick from firing
+    setTagMenuOpen(true)
+  }
+
+  // Load tags on mount
+  useEffect(() => {
+    loadTags()
+  }, [puuid])
+
   // Helper to format time ago
   const formatTimeAgo = (date: Date) => {
     const now = new Date()
@@ -98,6 +137,18 @@ export function PlayerChip({
               <span className="text-base font-medium truncate">{summonerName}</span>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 flex-shrink-0"
+                onClick={handleTagButtonClick}
+                title="Tag player"
+              >
+                <Tag className={cn(
+                  "h-4 w-4",
+                  playerTags.length > 0 ? "text-primary" : "text-muted-foreground"
+                )} />
+              </Button>
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 {encounterCount} {encounterCount === 1 ? 'game' : 'games'}
               </span>
@@ -169,15 +220,39 @@ export function PlayerChip({
           <ModeStatsRow byMode={byMode} />
 
           {/* Tags */}
-          {tags.length > 0 && (
+          {playerTags.length > 0 && (
             <div className="flex gap-1.5 flex-wrap">
-              {tags.map((tag, idx) => (
-                <TagPill key={idx} label={tag.label} variant={tag.variant} />
+              {playerTags.map((tag, idx) => (
+                <TagPill
+                  key={idx}
+                  label={
+                    tag.tag_type === 'toxic' ? 'Toxic' :
+                    tag.tag_type === 'friendly' ? 'Friendly' :
+                    tag.tag_type === 'notable' ? 'Notable' :
+                    'Duo'
+                  }
+                  variant={
+                    tag.tag_type === 'toxic' ? 'toxic' :
+                    tag.tag_type === 'friendly' ? 'positive' :
+                    tag.tag_type === 'notable' ? 'notable' :
+                    'info'
+                  }
+                />
               ))}
             </div>
           )}
         </div>
       </CardContent>
+
+      {/* Tag Management Dialog */}
+      <PlayerTagMenu
+        open={tagMenuOpen}
+        onOpenChange={setTagMenuOpen}
+        puuid={puuid}
+        summonerName={summonerName}
+        existingTags={playerTags}
+        onTagsUpdated={handleTagsUpdated}
+      />
     </Card>
   )
 }

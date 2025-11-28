@@ -1,6 +1,6 @@
 {
   "name": "rift-revealer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Rift Revealer - League of Legends lobby analyzer",
   "main": "src/main.js",
   "scripts": {
@@ -37,6 +37,8 @@
     "vite": "^7.2.4"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.8",
     "axios": "^1.6.5",
     "better-sqlite3": "^9.2.2",
     "class-variance-authority": "^0.7.1",
@@ -56,6 +58,12 @@
   "build": {
     "appId": "com.riftrevealer.app",
     "productName": "Rift Revealer",
+    "extraResources": [
+      {
+        "from": "logo.png",
+        "to": "logo.png"
+      }
+    ],
     "files": [
       "src/main.js",
       "src/preload.js",
@@ -84,23 +92,33 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "logo.png",
       "signAndEditExecutable": false
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "logo.png",
       "category": "public.app-category.utilities"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "logo.png",
       "category": "Utility"
     },

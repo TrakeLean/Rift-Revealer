@@ -36,5 +36,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('game-auto-imported', handler);
     return () => ipcRenderer.removeListener('game-auto-imported', handler);
   },
-  diagnoseDatabase: () => ipcRenderer.invoke('diagnose-database')
+  diagnoseDatabase: () => ipcRenderer.invoke('diagnose-database'),
+
+  // Player tagging API
+  addPlayerTag: (puuid, summonerName, tagType, note) => ipcRenderer.invoke('add-player-tag', puuid, summonerName, tagType, note),
+  removePlayerTag: (puuid, tagType) => ipcRenderer.invoke('remove-player-tag', puuid, tagType),
+  removeAllPlayerTags: (puuid) => ipcRenderer.invoke('remove-all-player-tags', puuid),
+  getPlayerTags: (puuid) => ipcRenderer.invoke('get-player-tags', puuid),
+  getAllTaggedPlayers: () => ipcRenderer.invoke('get-all-tagged-players')
 });

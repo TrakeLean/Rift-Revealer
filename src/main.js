@@ -44,10 +44,15 @@ function getQueueName(queueId) {
 }
 
 function createWindow() {
+  // Get icon path - different locations for dev vs packaged
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'logo.png')
+    : path.join(__dirname, '../logo.png');
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    icon: path.join(__dirname, '../logo.png'),
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -319,6 +324,7 @@ ipcMain.handle('analyze-lobby', async () => {
 
           analysis.push({
             player: player.summonerName,
+            puuid: player.puuid,
             source: player.source,
             encounterCount: history.stats.totalGames,
             wins: history.stats.asEnemy.wins + history.stats.asTeammate.wins,
@@ -330,7 +336,8 @@ ipcMain.handle('analyze-lobby', async () => {
             asAlly: history.stats.enhanced.asAlly,
             lastSeen: history.stats.enhanced.lastSeen,
             threatLevel: history.stats.enhanced.threatLevel,
-            allyQuality: history.stats.enhanced.allyQuality
+            allyQuality: history.stats.enhanced.allyQuality,
+            byMode: history.stats.enhanced.byMode
           });
         }
       }
@@ -390,6 +397,7 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
 
         analysis.push({
           player: player.summonerName,
+          puuid: player.puuid,
           source: player.source,
           encounterCount: history.stats.totalGames,
           wins: history.stats.asEnemy.wins + history.stats.asTeammate.wins,
@@ -644,4 +652,56 @@ ipcMain.handle('stop-auto-monitor', async () => {
     lastAnalyzedPlayers = null;
   }
   return { success: true, message: 'Auto-monitoring stopped' };
+});
+
+// ========== Player Tagging IPC Handlers ==========
+
+ipcMain.handle('add-player-tag', async (event, puuid, summonerName, tagType, note) => {
+  try {
+    db.addPlayerTag(puuid, summonerName, tagType, note);
+    return { success: true, message: 'Tag added successfully' };
+  } catch (error) {
+    console.error('Failed to add player tag:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('remove-player-tag', async (event, puuid, tagType) => {
+  try {
+    db.removePlayerTag(puuid, tagType);
+    return { success: true, message: 'Tag removed successfully' };
+  } catch (error) {
+    console.error('Failed to remove player tag:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('remove-all-player-tags', async (event, puuid) => {
+  try {
+    db.removeAllPlayerTags(puuid);
+    return { success: true, message: 'All tags removed successfully' };
+  } catch (error) {
+    console.error('Failed to remove all player tags:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-player-tags', async (event, puuid) => {
+  try {
+    const tags = db.getPlayerTags(puuid);
+    return { success: true, tags };
+  } catch (error) {
+    console.error('Failed to get player tags:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-all-tagged-players', async () => {
+  try {
+    const taggedPlayers = db.getAllTaggedPlayers();
+    return { success: true, taggedPlayers };
+  } catch (error) {
+    console.error('Failed to get tagged players:', error);
+    return { success: false, error: error.message };
+  }
 });

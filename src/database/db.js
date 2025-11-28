@@ -445,6 +445,88 @@ class DatabaseManager {
     };
   }
 
+  // ========== Player Tagging Methods ==========
+
+  /**
+   * Add or update a tag for a player
+   * @param {string} puuid - Player's PUUID
+   * @param {string} summonerName - Player's summoner name
+   * @param {string} tagType - 'toxic', 'friendly', 'notable', or 'duo'
+   * @param {string|null} note - Optional note text
+   */
+  addPlayerTag(puuid, summonerName, tagType, note = null) {
+    const stmt = this.db.prepare(`
+      INSERT INTO player_tags (puuid, summoner_name, tag_type, note, created_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(puuid, tag_type) DO UPDATE SET
+        summoner_name = excluded.summoner_name,
+        note = excluded.note,
+        created_at = excluded.created_at
+    `);
+    return stmt.run(puuid, summonerName, tagType, note, Date.now());
+  }
+
+  /**
+   * Remove a specific tag from a player
+   * @param {string} puuid - Player's PUUID
+   * @param {string} tagType - Tag type to remove
+   */
+  removePlayerTag(puuid, tagType) {
+    const stmt = this.db.prepare(`
+      DELETE FROM player_tags WHERE puuid = ? AND tag_type = ?
+    `);
+    return stmt.run(puuid, tagType);
+  }
+
+  /**
+   * Remove all tags from a player
+   * @param {string} puuid - Player's PUUID
+   */
+  removeAllPlayerTags(puuid) {
+    const stmt = this.db.prepare(`
+      DELETE FROM player_tags WHERE puuid = ?
+    `);
+    return stmt.run(puuid);
+  }
+
+  /**
+   * Get all tags for a specific player
+   * @param {string} puuid - Player's PUUID
+   * @returns {Array} Array of tag objects
+   */
+  getPlayerTags(puuid) {
+    const stmt = this.db.prepare(`
+      SELECT tag_type, note, created_at FROM player_tags WHERE puuid = ?
+    `);
+    return stmt.all(puuid);
+  }
+
+  /**
+   * Get all tagged players
+   * @returns {Array} Array of tagged player objects with their tags
+   */
+  getAllTaggedPlayers() {
+    const stmt = this.db.prepare(`
+      SELECT puuid, summoner_name, tag_type, note, created_at
+      FROM player_tags
+      ORDER BY created_at DESC
+    `);
+    return stmt.all();
+  }
+
+  /**
+   * Check if a player has any tags
+   * @param {string} puuid - Player's PUUID
+   * @returns {boolean}
+   */
+  hasPlayerTags(puuid) {
+    const stmt = this.db.prepare(`
+      SELECT COUNT(*) as count FROM player_tags WHERE puuid = ?
+    `);
+    const result = stmt.get(puuid);
+    return result.count > 0;
+  }
+
   close() {
     this.db.close();
   }

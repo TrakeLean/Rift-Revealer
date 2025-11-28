@@ -252,6 +252,7 @@ export function LobbyAnalysis() {
               {detectedPlayers.map((player) => (
                 <div key={player.player} className="space-y-3">
                   <PlayerChip
+                    puuid={player.puuid}
                     summonerName={player.player}
                     encounterCount={player.encounterCount}
                     wins={player.wins}
