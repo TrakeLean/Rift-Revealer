@@ -55,13 +55,13 @@ function App() {
         <div className="border-t border-border p-4 space-y-3">
           <div className="flex justify-center">
             <img
-              src="/logo.png"
+              src="./logo.png"
               alt="Rift Revealer Logo"
               className="h-16 w-16 opacity-70 hover:opacity-100 transition-opacity"
             />
           </div>
           <p className="text-xs text-muted-foreground text-center">
-            V1.0.0 - Made by 0xTrk
+            V1.1.0 - Made by 0xTrk
           </p>
         </div>
       </aside>

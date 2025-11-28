@@ -50,8 +50,20 @@ CREATE TABLE IF NOT EXISTS match_participants (
     FOREIGN KEY (puuid) REFERENCES players(puuid)
 );
 
+-- Player tags/notes table
+CREATE TABLE IF NOT EXISTS player_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    puuid TEXT NOT NULL,
+    summoner_name TEXT NOT NULL,
+    tag_type TEXT NOT NULL CHECK(tag_type IN ('toxic', 'friendly', 'notable', 'duo')),
+    note TEXT,
+    created_at INTEGER NOT NULL,
+    UNIQUE(puuid, tag_type)
+);
+
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_participants_match ON match_participants(match_id);
 CREATE INDEX IF NOT EXISTS idx_participants_puuid ON match_participants(puuid);
 CREATE INDEX IF NOT EXISTS idx_matches_creation ON matches(game_creation);
 CREATE INDEX IF NOT EXISTS idx_players_name ON players(summoner_name);
+CREATE INDEX IF NOT EXISTS idx_player_tags_puuid ON player_tags(puuid);

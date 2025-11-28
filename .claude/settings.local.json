@@ -40,7 +40,8 @@
       "Bash(fi)",
       "Bash(npx asar:*)",
       "Bash(if [ -f \"nul\" ])",
-      "Bash(then rm nul)"
+      "Bash(then rm nul)",
+      "Bash(npx shadcn@latest add:*)"
     ],
     "deny": [],
     "ask": []
