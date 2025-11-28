@@ -5,6 +5,7 @@ import { LobbyAnalysis } from './pages/LobbyAnalysis'
 import { Button } from './components/ui/button'
 import { Home, Settings, History } from 'lucide-react'
 import { cn } from './lib/utils'
+import ErrorBoundary from './components/ErrorBoundary'
 
 type Page = 'lobby' | 'history' | 'settings'
 
@@ -20,7 +21,7 @@ function App() {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-border bg-card">
+      <aside className="w-64 border-r border-border bg-card flex flex-col">
         <div className="p-6">
           <h1 className="text-2xl font-bold">Rift Revealer</h1>
           <p className="text-xs text-muted-foreground mt-1">
@@ -28,7 +29,7 @@ function App() {
           </p>
         </div>
 
-        <nav className="px-3 space-y-1">
+        <nav className="px-3 space-y-1 flex-1">
           {navigationItems.map((item) => {
             const Icon = item.icon
             const isActive = currentPage === item.id
@@ -50,9 +51,16 @@ function App() {
           })}
         </nav>
 
-        {/* Footer Info */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border">
-          <p className="text-xs text-muted-foreground">
+        {/* Footer with Logo */}
+        <div className="border-t border-border p-4 space-y-3">
+          <div className="flex justify-center">
+            <img
+              src="/logo.png"
+              alt="Rift Revealer Logo"
+              className="h-16 w-16 opacity-70 hover:opacity-100 transition-opacity"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground text-center">
             V1.0.0 - Made by 0xTrk
           </p>
         </div>
@@ -69,9 +77,11 @@ function App() {
           </div>
 
           {/* Page Content */}
-          {currentPage === 'lobby' && <LobbyAnalysis />}
-          {currentPage === 'history' && <MatchHistory />}
-          {currentPage === 'settings' && <SettingsPage />}
+          <ErrorBoundary key={currentPage}>
+            {currentPage === 'lobby' && <LobbyAnalysis />}
+            {currentPage === 'history' && <MatchHistory />}
+            {currentPage === 'settings' && <SettingsPage />}
+          </ErrorBoundary>
         </div>
       </main>
     </div>

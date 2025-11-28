@@ -105,16 +105,26 @@ class RiotAPI {
     }
   }
 
-  async importMatchHistory(puuid, region, count = 20) {
+  async importMatchHistory(puuid, region, count = 20, progressCallback = null) {
     try {
       const matchIds = await this.getMatchIdsByPuuid(puuid, region, count);
       let imported = 0;
 
-      for (const matchId of matchIds) {
+      for (let i = 0; i < matchIds.length; i++) {
+        const matchId = matchIds[i];
         try {
           const matchData = await this.getMatchDetails(matchId, region);
           this.db.saveMatch(matchData);
           imported++;
+
+          // Send progress update
+          if (progressCallback) {
+            progressCallback({
+              current: i + 1,
+              total: matchIds.length,
+              imported: imported
+            });
+          }
 
           await new Promise(resolve => setTimeout(resolve, 100));
         } catch (error) {

@@ -1,30 +1,33 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Download, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 
 export function MatchHistory() {
-  const [matchCount, setMatchCount] = useState(20)
   const [status, setStatus] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [isImporting, setIsImporting] = useState(false)
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null)
+  const [progress, setProgress] = useState<{ current: number; total: number; imported: number } | null>(null)
+
+  useEffect(() => {
+    // Listen for progress updates from main process
+    const cleanup = window.api.onImportProgress((progressData) => {
+      setProgress(progressData)
+    })
+
+    return cleanup
+  }, [])
 
   const handleImport = async () => {
-    if (matchCount < 1 || matchCount > 100) {
-      setStatus({ message: 'Please enter a number between 1 and 100', type: 'error' })
-      return
-    }
-
     setIsImporting(true)
-    setStatus({ message: 'Starting import...', type: 'info' })
-    setProgress({ current: 0, total: matchCount })
+    setStatus({ message: 'Fetching match IDs from Riot API...', type: 'info' })
+    setProgress({ current: 0, total: 100, imported: 0 })
 
     try {
-      const result = await window.api.importMatchHistory(matchCount)
+      const result = await window.api.importMatchHistory()
 
       if (result.success) {
         setStatus({
-          message: `Successfully imported ${result.data?.imported || matchCount} matches!`,
+          message: `Successfully imported ${result.imported} matches!`,
           type: 'success',
         })
         setProgress(null)
@@ -46,47 +49,32 @@ export function MatchHistory() {
         <CardHeader>
           <CardTitle>Import Match History</CardTitle>
           <CardDescription>
-            Import your recent matches from the Riot API to build your encounter database
+            Import your last 100 matches (maximum allowed by Riot API) to build your encounter database
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Match Count Input */}
+          {/* Import Button */}
           <div className="space-y-2">
-            <label htmlFor="matchCount" className="text-sm font-medium">
-              Number of Matches
-            </label>
-            <div className="flex gap-3">
-              <input
-                id="matchCount"
-                type="number"
-                min="1"
-                max="100"
-                value={matchCount}
-                onChange={(e) => setMatchCount(parseInt(e.target.value) || 20)}
-                className="flex-1 px-4 py-2 bg-muted border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
-                disabled={isImporting}
-              />
-              <Button
-                size="lg"
-                onClick={handleImport}
-                disabled={isImporting}
-                className="gap-2"
-              >
-                {isImporting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Importing...
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4" />
-                    Import Matches
-                  </>
-                )}
-              </Button>
-            </div>
+            <Button
+              size="lg"
+              onClick={handleImport}
+              disabled={isImporting}
+              className="w-full gap-2"
+            >
+              {isImporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Importing Matches...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  Import Last 100 Matches
+                </>
+              )}
+            </Button>
             <p className="text-xs text-muted-foreground">
-              Recommended: 20-50 matches. More matches = longer import time.
+              This will fetch the maximum 100 matches allowed by the Riot API. First import may take 1-2 minutes.
             </p>
           </div>
 
@@ -94,17 +82,20 @@ export function MatchHistory() {
           {progress && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Progress</span>
+                <span className="text-muted-foreground">Importing matches...</span>
                 <span className="text-foreground font-medium">
                   {progress.current} / {progress.total}
                 </span>
               </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div className="h-2.5 bg-muted rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-primary transition-all duration-300"
+                  className="h-full bg-primary transition-all duration-200 ease-out"
                   style={{ width: `${(progress.current / progress.total) * 100}%` }}
                 />
               </div>
+              <p className="text-xs text-muted-foreground text-center">
+                {progress.imported} matches saved successfully
+              </p>
             </div>
           )}
 
@@ -143,12 +134,12 @@ export function MatchHistory() {
             </CardContent>
           </Card>
 
-          {/* Rate Limit Warning */}
-          <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-950/30 text-yellow-400 border border-yellow-900/50">
+          {/* Rate Limit Info */}
+          <div className="flex items-start gap-2 p-3 rounded-md bg-blue-950/30 text-blue-400 border border-blue-900/50">
             <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <div className="text-xs">
-              <strong>Rate Limit Warning:</strong> Development API keys are limited to 20 requests
-              per second. Large imports may take several minutes.
+              <strong>Import Time:</strong> Importing 100 matches takes approximately 10-15 seconds
+              with rate limiting. The progress bar updates in real-time.
             </div>
           </div>
         </CardContent>

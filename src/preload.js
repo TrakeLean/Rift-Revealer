@@ -4,12 +4,37 @@ contextBridge.exposeInMainWorld('api', {
   getUserConfig: () => ipcRenderer.invoke('get-user-config'),
   saveUserConfig: (config) => ipcRenderer.invoke('save-user-config', config),
   validateAndSaveConfig: (summonerName, region, apiKey) => ipcRenderer.invoke('validate-and-save-config', summonerName, region, apiKey),
-  importMatchHistory: (count) => ipcRenderer.invoke('import-match-history', count),
+  importMatchHistory: () => ipcRenderer.invoke('import-match-history'),
   connectLCU: () => ipcRenderer.invoke('connect-lcu'),
   getLobbyPlayers: () => ipcRenderer.invoke('get-lobby-players'),
   getPlayerHistory: (summonerName) => ipcRenderer.invoke('get-player-history', summonerName),
   analyzeLobby: () => ipcRenderer.invoke('analyze-lobby'),
   startAutoMonitor: () => ipcRenderer.invoke('start-auto-monitor'),
   stopAutoMonitor: () => ipcRenderer.invoke('stop-auto-monitor'),
-  onLobbyUpdate: (callback) => ipcRenderer.on('lobby-update', (event, data) => callback(data))
+  onLobbyUpdate: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('lobby-update', handler);
+    return () => ipcRenderer.removeListener('lobby-update', handler);
+  },
+  onImportProgress: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('import-progress', handler);
+    return () => ipcRenderer.removeListener('import-progress', handler);
+  },
+  onGameflowStateChange: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('gameflow-state-change', handler);
+    return () => ipcRenderer.removeListener('gameflow-state-change', handler);
+  },
+  onGameflowStatus: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('gameflow-status', handler);
+    return () => ipcRenderer.removeListener('gameflow-status', handler);
+  },
+  onGameAutoImported: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('game-auto-imported', handler);
+    return () => ipcRenderer.removeListener('game-auto-imported', handler);
+  },
+  diagnoseDatabase: () => ipcRenderer.invoke('diagnose-database')
 });

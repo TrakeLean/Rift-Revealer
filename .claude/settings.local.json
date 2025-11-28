@@ -28,7 +28,19 @@
       "Bash(tee:*)",
       "Bash(git init:*)",
       "Bash(git config:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git push:*)",
+      "Skill(lol-modern-ui)",
+      "Bash(exit 0)",
+      "Bash(if [ -d \"public\" ])",
+      "Bash(then echo \"exists\")",
+      "Bash(else mkdir public)",
+      "Bash(fi)",
+      "Bash(npx asar:*)",
+      "Bash(if [ -f \"nul\" ])",
+      "Bash(then rm nul)"
     ],
     "deny": [],
     "ask": []
