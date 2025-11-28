@@ -32,6 +32,7 @@
     "electron-builder": "^26.0.12",
     "electron-rebuild": "^3.2.9",
     "electron-vite": "^4.0.1",
+    "png-to-ico": "^3.0.1",
     "postcss": "^8.5.6",
     "typescript": "^5.9.3",
     "vite": "^7.2.4"
@@ -60,6 +61,10 @@
     "appId": "com.riftrevealer.app",
     "productName": "Rift Revealer",
     "extraResources": [
+      {
+        "from": "icon.ico",
+        "to": "icon.ico"
+      },
       {
         "from": "logo.png",
         "to": "logo.png"
@@ -104,7 +109,7 @@
           ]
         }
       ],
-      "icon": "logo.png",
+      "icon": "icon.ico",
       "signAndEditExecutable": false
     },
     "mac": {

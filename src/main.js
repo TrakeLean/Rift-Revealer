@@ -48,8 +48,8 @@ function getQueueName(queueId) {
 function createWindow() {
   // Get icon path - different locations for dev vs packaged
   const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'logo.png')
-    : path.join(__dirname, '../logo.png');
+    ? path.join(process.resourcesPath, 'icon.ico')
+    : path.join(__dirname, '../icon.ico');
 
   mainWindow = new BrowserWindow({
     width: 1400,
