@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Rift Revealer Logo](./logo.png)
+<img src="./logo.png" alt="Rift Revealer Logo" width="300">
 
 **Never forget a face in the Rift**
 
