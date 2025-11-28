@@ -675,8 +675,8 @@ sqlite3 <database_path>    # Open database in CLI
 ## Contact & Support
 
 - Repository: https://github.com/TrakeLean/Rift-Revealer
-- Developer: Claude Code (Anthropic)
-- User: Tarek Lein
+- Developer: Tarek Lein (0xTrk)
+- Issues: https://github.com/TrakeLean/Rift-Revealer/issues
 
 ---
 
