@@ -20,11 +20,11 @@ A League of Legends desktop application that automatically detects lobby players
 
 ## 📥 Download
 
-**[⬇️ Download Rift Revealer v1.1.0](https://github.com/TrakeLean/Rift-Revealer/releases/latest)**
+**[⬇️ Download Latest Version](https://github.com/TrakeLean/Rift-Revealer/releases/latest)**
 
 Choose your preferred version:
-- **Installer** (`Rift Revealer Setup 1.1.0.exe`) - Recommended for most users
-- **Portable** (`Rift Revealer 1.1.0.exe`) - No installation required
+- **Installer** (`Rift Revealer Setup.exe`) - Recommended for most users
+- **Portable** (`Rift Revealer.exe`) - No installation required
 
 ---
 
@@ -34,6 +34,7 @@ Choose your preferred version:
 - Monitors League client in real-time
 - Instant analysis when players are detected
 - Works in Champion Select and In-Game
+- **Runs in background** - Minimizes to system tray, keeps tracking 24/7
 
 ### 📊 Comprehensive Match History
 - Detailed stats from all previous games together
@@ -41,8 +42,9 @@ Choose your preferred version:
 - Champion matchup history
 - Performance metrics (KDA, damage, CS)
 - Threat level indicators
+- **Profile icons** displayed next to player names
 
-### 🏷️ Player Tagging System (New in v1.1.0!)
+### 🏷️ Player Tagging System
 - Tag players as **Toxic** (red), **Friendly** (green), **Notable** (yellow), or **Duo** (blue)
 - Add optional notes to remember specific details
 - Tags persist across all future games
@@ -52,12 +54,24 @@ Choose your preferred version:
 - Separate stats for Ranked, Normal, ARAM, Arena, and Other modes
 - See your performance against each player per queue type
 - Identify which modes you struggle or excel in against specific opponents
+- **Compact inline badges** for quick scanning
 
-### 🎨 Modern Dark UI
-- Sleek esports-style interface
+### 🎨 Modern Compact UI
+- Sleek esports-style dark interface
+- **40% more compact** player cards with larger, bolder text
 - Color-coded threat indicators
 - Quick visual scanning for important info
-- Responsive design
+- Responsive design that adapts to your screen
+
+### 🔄 Auto-Update System
+- Automatic update notifications
+- One-click download of new versions
+- Never miss new features or bug fixes
+
+### 🚀 Auto-Start on Windows
+- Optional auto-start with Windows
+- Always ready when you launch League
+- Runs silently in the background
 
 ---
 
@@ -108,6 +122,17 @@ Once configured, Rift Revealer runs automatically in the background:
    - Champion matchups
    - Recent games timeline
    - Recent form (last 5 games)
+
+### Running in Background
+
+Rift Revealer can run silently in the system tray:
+
+1. **Close the window** - App minimizes to system tray (doesn't quit)
+2. **Continues tracking** games even when hidden
+3. **Double-click tray icon** to restore the window
+4. **Right-click tray icon** for options:
+   - "Show Rift Revealer" - Opens the window
+   - "Quit" - Fully closes the app
 
 ### Tagging Players
 
