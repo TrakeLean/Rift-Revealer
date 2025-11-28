@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu } = require('electron');
 const path = require('path');
 const Database = require('./database/db');
 const RiotAPI = require('./api/riotApi');
@@ -6,6 +6,7 @@ const LCUConnector = require('./api/lcuConnector');
 const UpdateChecker = require('./api/updateChecker');
 
 let mainWindow;
+let tray = null;
 let db;
 let riotApi;
 let lcuConnector;
@@ -45,6 +46,39 @@ function getQueueName(queueId) {
   return QUEUE_NAMES[queueId] || `Queue ${queueId}`;
 }
 
+function createTray() {
+  // Get icon path
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.ico')
+    : path.join(__dirname, '../icon.ico');
+
+  tray = new Tray(iconPath);
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Show Rift Revealer',
+      click: () => {
+        mainWindow?.show();
+      }
+    },
+    {
+      label: 'Quit',
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setToolTip('Rift Revealer - Tracking lobbies');
+  tray.setContextMenu(contextMenu);
+
+  // Double click to show window
+  tray.on('double-click', () => {
+    mainWindow?.show();
+  });
+}
+
 function createWindow() {
   // Get icon path - different locations for dev vs packaged
   const iconPath = app.isPackaged
@@ -60,6 +94,24 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false
+    }
+  });
+
+  // Minimize to tray instead of closing
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+
+      // Show notification on first minimize
+      if (!mainWindow.hasShownTrayNotification) {
+        tray.displayBalloon({
+          title: 'Rift Revealer',
+          content: 'App is still running in the background and tracking your games!',
+          icon: iconPath
+        });
+        mainWindow.hasShownTrayNotification = true;
+      }
     }
   });
 
@@ -123,6 +175,10 @@ app.whenReady().then(() => {
     updateChecker = new UpdateChecker();
     console.log('UpdateChecker initialized');
 
+    console.log('Creating system tray...');
+    createTray();
+    console.log('System tray created');
+
     console.log('Creating window...');
     createWindow();
     console.log('Window created');
@@ -150,9 +206,8 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  // Don't quit the app - keep running in tray
+  // Users can quit from the tray menu
 });
 
 app.on('before-quit', () => {
