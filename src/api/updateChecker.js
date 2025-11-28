@@ -8,6 +8,34 @@ class UpdateChecker {
   }
 
   /**
+   * Convert markdown to plain text for display
+   * @param {string} markdown - Markdown text
+   * @returns {string} - Plain text
+   */
+  markdownToPlainText(markdown) {
+    if (!markdown) return '';
+
+    return markdown
+      // Remove headers (###, ##, #)
+      .replace(/^#{1,6}\s+/gm, '')
+      // Remove bold/italic (**text**, *text*, __text__, _text_)
+      .replace(/(\*\*|__)(.*?)\1/g, '$2')
+      .replace(/(\*|_)(.*?)\1/g, '$2')
+      // Remove links [text](url) -> text
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      // Remove bullet points (-, *, +)
+      .replace(/^[\s]*[-*+]\s+/gm, '• ')
+      // Remove code blocks (```)
+      .replace(/```[\s\S]*?```/g, '')
+      // Remove inline code (`code`)
+      .replace(/`([^`]+)`/g, '$1')
+      // Clean up extra newlines (max 2 consecutive)
+      .replace(/\n{3,}/g, '\n\n')
+      // Trim whitespace
+      .trim();
+  }
+
+  /**
    * Check for updates from GitHub releases
    * @returns {Promise<{hasUpdate: boolean, latestVersion: string, downloadUrl: string, releaseNotes: string}>}
    */
@@ -48,7 +76,7 @@ class UpdateChecker {
         latestVersion,
         currentVersion,
         downloadUrl,
-        releaseNotes: latestRelease.body || 'No release notes available.',
+        releaseNotes: this.markdownToPlainText(latestRelease.body) || 'No release notes available.',
         releaseName: latestRelease.name || `Version ${latestVersion}`
       };
     } catch (error) {
