@@ -1,0 +1,90 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run package
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-executables
+          path: |
+            dist/*.exe
+            dist/*.exe.blockmap
+          retention-days: 5
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-executables
+          path: dist
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Rift Revealer v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## 🎮 Rift Revealer v${{ steps.version.outputs.VERSION }}
+
+            ### 📥 Downloads
+            - **Installer** (`Rift Revealer Setup ${{ steps.version.outputs.VERSION }}.exe`) - Recommended
+            - **Portable** (`Rift Revealer ${{ steps.version.outputs.VERSION }}.exe`) - No installation
+
+            ### 📝 What's New
+            See [CHANGELOG.md](https://github.com/TrakeLean/Rift-Revealer/blob/main/CHANGELOG.md) for details.
+
+            ### ⚠️ Requirements
+            - Windows 10/11 (64-bit)
+            - League of Legends installed
+            - Riot Games API Key ([Get one here](https://developer.riotgames.com))
+
+            ---
+
+            **Full Changelog**: https://github.com/TrakeLean/Rift-Revealer/compare/${{ github.event.before }}...${{ github.sha }}
+          files: |
+            dist/*.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
