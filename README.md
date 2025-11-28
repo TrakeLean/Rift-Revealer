@@ -269,7 +269,7 @@ Rift Revealer is not endorsed by Riot Games and does not reflect the views or op
 
 <div align="center">
 
-**Made with ❤️ by [0xTrk](https://github.com/TrakeLean)**
+**Made with ❤️ by [TrakeLean](https://github.com/TrakeLean)**
 
 ⭐ Star this repo if you find it useful!
 
