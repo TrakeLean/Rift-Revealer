@@ -36,13 +36,36 @@ Desktop app that automatically monitors League of Legends lobbies and shows your
 ✅ Auto-monitoring working
 ✅ Logo added to sidebar
 ✅ Enhanced player cards with threat indicators
-✅ **v1.3.0 released** - Compact UI redesign with profile icons
+✅ **v1.3.2 released** - System tray support + icon fixes + compact UI + profile icons
 ✅ GitHub Actions workflow for automatic builds
 ✅ Profile icon system fully integrated with database migration
 ✅ Improved logging for better debugging
-✅ All changes committed and pushed to GitHub (commit `a2fbb94`)
-✅ Windows executables built and released
+✅ System tray - runs in background, continues tracking when window closed
+✅ Update notification markdown formatting fixed
+✅ README.md fully updated with all current features
+✅ All changes committed and pushed to GitHub (commit `16ce16d`)
 🎯 **Ready for next session** - All context documented, no pending work
+
+---
+
+## 📋 Release Checklist
+
+**⚠️ IMPORTANT: Follow this checklist when creating a new release!**
+
+1. **Update version** in `package.json`
+2. **Commit changes** with descriptive commit message
+3. **Create git tag**: `git tag vX.X.X`
+4. **Push to GitHub**: `git push && git push --tags`
+5. **⚠️ UPDATE README.md** - Add new features to the Features section!
+   - This is easy to forget but critical for users to know what's new
+   - Update the "What's New" or feature descriptions
+   - Keep README in sync with actual features
+6. **GitHub Actions** will automatically build and create the release
+
+**Why this matters:**
+- Users read README.md first to see what the app can do
+- Outdated README = confused users who don't know about new features
+- Keep it evergreen (don't hardcode version numbers)
 
 ---
 
