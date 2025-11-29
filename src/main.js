@@ -930,7 +930,19 @@ async function checkForUpdatesOnStartup() {
 
     if (autoUpdateCheckEnabled && app.isPackaged) {
       console.log('Checking for updates on startup...');
-      autoUpdater.checkForUpdates();
+      const result = await updateChecker.checkForUpdates();
+
+      if (result.hasUpdate) {
+        // Send update notification to renderer to show custom dialog
+        mainWindow?.webContents.send('update-available', {
+          hasUpdate: result.hasUpdate,
+          latestVersion: result.latestVersion,
+          currentVersion: result.currentVersion,
+          releaseNotes: result.releaseNotes,
+          releaseName: result.releaseName,
+          downloadUrl: result.downloadUrl
+        });
+      }
     } else {
       console.log('Auto-update check is disabled or running in dev mode');
     }
@@ -978,16 +990,16 @@ ipcMain.handle('set-auto-update-check', async (event, enabled) => {
 });
 
 // Download the update (called when user clicks "Download Update")
+// Opens the browser to the GitHub release download page
 ipcMain.handle('download-update', async () => {
   try {
-    if (!app.isPackaged) {
-      return {
-        success: false,
-        error: 'Updates are only available in packaged builds'
-      };
+    const result = await updateChecker.checkForUpdates();
+    if (result.hasUpdate && result.downloadUrl) {
+      await shell.openExternal(result.downloadUrl);
+      return { success: true };
+    } else {
+      return { success: false, error: 'No update available' };
     }
-    await autoUpdater.downloadUpdate();
-    return { success: true };
   } catch (error) {
     console.error('Failed to download update:', error);
     return { success: false, error: error.message };
