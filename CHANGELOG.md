@@ -5,6 +5,14 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.6] - 2025-01-29
+
+### Fixed
+- "Check for Updates" button now works in both dev and packaged modes using custom UpdateChecker
+- "Start on Windows Startup" toggle now correctly reflects actual Windows registry setting
+- Single instance lock no longer creates blank window or freezes when launching second instance
+- Added missing openDownloadUrl IPC handler for opening browser to download updates
+
 ## [1.4.5] - 2025-01-29
 
 ### Fixed
