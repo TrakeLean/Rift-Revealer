@@ -36,15 +36,17 @@ Desktop app that automatically monitors League of Legends lobbies and shows your
 ✅ Auto-monitoring working
 ✅ Logo added to sidebar
 ✅ Enhanced player cards with threat indicators
-✅ **v1.3.2 released** - System tray support + icon fixes + compact UI + profile icons
+✅ **v1.4.5 released** - Update notification fixes + single instance lock improvements
 ✅ GitHub Actions workflow for automatic builds
 ✅ Profile icon system fully integrated with database migration
 ✅ Improved logging for better debugging
 ✅ System tray - runs in background, continues tracking when window closed
 ✅ Update notification markdown formatting fixed
 ✅ README.md fully updated with all current features
-✅ All changes committed and pushed to GitHub (commit `16ce16d`)
-🎯 **Ready for next session** - All context documented, no pending work
+❌ **KNOWN BUGS:**
+  - "Start on Windows Startup" setting keeps toggling off every time the app opens
+  - "Check for Updates" button fails with "Failed to check for updates" error
+🎯 **Next task** - Fix the startup setting persistence bug
 
 ---
 

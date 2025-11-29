@@ -4,6 +4,7 @@ const path = require('path');
 const Database = require('./database/db');
 const RiotAPI = require('./api/riotApi');
 const LCUConnector = require('./api/lcuConnector');
+const UpdateChecker = require('./api/updateChecker');
 
 let mainWindow;
 let tray = null;
@@ -11,6 +12,7 @@ let db;
 let riotApi;
 let lcuConnector;
 let autoMonitorInterval = null;
+let updateChecker = null;
 
 // Configure auto-updater
 autoUpdater.autoDownload = false; // We'll download manually after user confirmation
@@ -269,6 +271,9 @@ if (!gotTheLock) {
 
     lcuConnector = new LCUConnector();
     console.log('LCUConnector initialized');
+
+    updateChecker = new UpdateChecker();
+    console.log('UpdateChecker initialized');
 
     console.log('Creating system tray...');
     createTray();
@@ -933,16 +938,28 @@ async function checkForUpdatesOnStartup() {
 
 ipcMain.handle('check-for-updates', async () => {
   try {
-    if (!app.isPackaged) {
-      return {
-        success: false,
-        error: 'Updates are only available in packaged builds'
-      };
-    }
-    await autoUpdater.checkForUpdates();
-    return { success: true };
+    const result = await updateChecker.checkForUpdates();
+    return {
+      success: true,
+      hasUpdate: result.hasUpdate,
+      currentVersion: result.currentVersion,
+      latestVersion: result.latestVersion,
+      downloadUrl: result.downloadUrl,
+      releaseNotes: result.releaseNotes,
+      releaseName: result.releaseName
+    };
   } catch (error) {
     console.error('Failed to check for updates:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('open-download-url', async (event, url) => {
+  try {
+    await shell.openExternal(url);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to open download URL:', error);
     return { success: false, error: error.message };
   }
 });
@@ -1008,8 +1025,20 @@ ipcMain.handle('set-auto-start', async (event, enabled) => {
 
 ipcMain.handle('get-auto-start', async () => {
   try {
-    const enabled = db.getAutoStart();
-    return { success: true, enabled };
+    // Get the actual Windows setting
+    const loginSettings = app.getLoginItemSettings();
+    const actualEnabled = loginSettings.openAtLogin;
+
+    // Get the database setting
+    const dbEnabled = db.getAutoStart();
+
+    // If they're out of sync, update the database to match Windows
+    if (actualEnabled !== dbEnabled) {
+      console.log(`Auto-start out of sync. Windows: ${actualEnabled}, DB: ${dbEnabled}. Syncing to Windows value.`);
+      db.setAutoStart(actualEnabled);
+    }
+
+    return { success: true, enabled: actualEnabled };
   } catch (error) {
     console.error('Failed to get auto-start setting:', error);
     return { success: false, error: error.message };
