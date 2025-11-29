@@ -43,10 +43,11 @@ Desktop app that automatically monitors League of Legends lobbies and shows your
 ✅ System tray - runs in background, continues tracking when window closed
 ✅ Update notification markdown formatting fixed
 ✅ README.md fully updated with all current features
-❌ **KNOWN BUGS:**
-  - "Start on Windows Startup" setting keeps toggling off every time the app opens
-  - "Check for Updates" button fails with "Failed to check for updates" error
-🎯 **Next task** - Fix the startup setting persistence bug
+✅ **Recent bug fixes (uncommitted):**
+  - Fixed "Check for Updates" button (now uses custom UpdateChecker, works in dev mode)
+  - Fixed "Start on Windows Startup" toggle persistence (syncs with actual Windows registry)
+  - Fixed single instance lock (no more blank window freezing)
+🎯 **Ready for testing** - All known bugs resolved
 
 ---
 
