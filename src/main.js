@@ -103,6 +103,9 @@ function createWindow() {
     }
   });
 
+  // Explicitly set icon for Windows taskbar (fixes icon not showing in packaged app)
+  mainWindow.setIcon(iconPath);
+
   // Minimize to tray instead of closing
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {

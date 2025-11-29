@@ -5,6 +5,11 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.7] - 2025-01-29
+
+### Fixed
+- Taskbar icon now correctly displays app icon instead of Electron default icon in packaged builds
+
 ## [1.4.6] - 2025-01-29
 
 ### Fixed
