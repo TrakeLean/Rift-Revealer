@@ -59,7 +59,8 @@
       "Bash(else echo \"not found\")",
       "Bash(npx png-to-ico:*)",
       "Bash(gh run view:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

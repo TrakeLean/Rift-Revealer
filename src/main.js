@@ -158,6 +158,25 @@ function createWindow() {
 
 // ========== Auto-Updater Event Handlers ==========
 
+// Helper function to strip HTML tags from release notes
+function stripHtmlTags(html) {
+  if (!html) return '';
+
+  return html
+    // Remove HTML tags
+    .replace(/<[^>]*>/g, '')
+    // Decode HTML entities
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Clean up extra whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 autoUpdater.on('checking-for-update', () => {
   console.log('Checking for updates...');
   mainWindow?.webContents.send('update-checking');
@@ -165,11 +184,15 @@ autoUpdater.on('checking-for-update', () => {
 
 autoUpdater.on('update-available', (info) => {
   console.log('Update available:', info.version);
+
+  // Strip HTML from release notes
+  const cleanNotes = stripHtmlTags(info.releaseNotes) || 'No release notes available.';
+
   mainWindow?.webContents.send('update-available', {
     hasUpdate: true,
     latestVersion: info.version,
     currentVersion: app.getVersion(),
-    releaseNotes: info.releaseNotes || 'No release notes available.',
+    releaseNotes: cleanNotes,
     releaseName: `Version ${info.version}`,
     releaseDate: info.releaseDate
   });
