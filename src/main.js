@@ -19,6 +19,7 @@ autoUpdater.autoInstallOnAppQuit = true;
 // Gameflow state machine variables
 let currentGameflowState = null;
 let lastAnalyzedPlayers = null;
+let gameImported = false; // Track if we've imported the current game
 
 // Queue types that anonymize player names until game starts
 const ANONYMIZED_QUEUES = [420, 440]; // Ranked Solo/Duo, Ranked Flex
@@ -619,6 +620,7 @@ async function startGameflowMonitor() {
         case 'ReadyCheck':
           // Waiting for champion select - clear any previous analysis
           lastAnalyzedPlayers = null;
+          gameImported = false; // Reset import flag when entering new lobby
           if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('gameflow-status', {
               state: currentGameflowState,
@@ -693,57 +695,69 @@ async function startGameflowMonitor() {
         }
 
         case 'EndOfGame':
-          // Game ended - auto-import the game
-          console.log('=== GAME ENDED - AUTO-IMPORTING ===');
+          // Game ended - auto-import the game (only once)
+          if (!gameImported) {
+            console.log('=== GAME ENDED - AUTO-IMPORTING ===');
+            gameImported = true; // Mark as imported to prevent multiple imports
 
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('gameflow-status', {
-              state: 'EndOfGame',
-              message: 'Game ended - importing match...',
-              canAnalyze: false
-            });
-          }
-
-          // Auto-import the completed game (import 1 match to get the latest)
-          try {
-            const config = db.getUserConfig();
-            if (config && config.riot_api_key) {
-              riotApi.setApiKey(config.riot_api_key);
-
-              // Wait 10 seconds for Riot to process the game
-              await new Promise(resolve => setTimeout(resolve, 10000));
-
-              console.log('Importing completed game...');
-              const result = await riotApi.importMatchHistory(config.puuid, config.region, 1);
-
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('gameflow-status', {
-                  state: 'EndOfGame',
-                  message: `Game imported! (${result} matches)`,
-                  canAnalyze: false
-                });
-
-                // Notify user
-                mainWindow.webContents.send('game-auto-imported', {
-                  success: true,
-                  imported: result
-                });
-              }
-
-              console.log(`✅ Auto-imported ${result} match(es)`);
-            }
-          } catch (error) {
-            console.error('Auto-import failed:', error.message);
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('gameflow-status', {
                 state: 'EndOfGame',
-                message: 'Game ended (auto-import failed)',
+                message: 'Game ended - importing match...',
+                canAnalyze: false
+              });
+            }
+
+            // Auto-import the completed game (import 1 match to get the latest)
+            try {
+              const config = db.getUserConfig();
+              if (config && config.riot_api_key) {
+                riotApi.setApiKey(config.riot_api_key);
+
+                // Wait 10 seconds for Riot to process the game
+                await new Promise(resolve => setTimeout(resolve, 10000));
+
+                console.log('Importing completed game...');
+                const result = await riotApi.importMatchHistory(config.puuid, config.region, 1);
+
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.webContents.send('gameflow-status', {
+                    state: 'EndOfGame',
+                    message: `Game imported! (${result} matches)`,
+                    canAnalyze: false
+                  });
+
+                  // Notify user
+                  mainWindow.webContents.send('game-auto-imported', {
+                    success: true,
+                    imported: result
+                  });
+                }
+
+                console.log(`✅ Auto-imported ${result} match(es)`);
+              }
+            } catch (error) {
+              console.error('Auto-import failed:', error.message);
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('gameflow-status', {
+                  state: 'EndOfGame',
+                  message: 'Game ended (auto-import failed)',
+                  canAnalyze: false
+                });
+              }
+            }
+
+            lastAnalyzedPlayers = null;
+          } else {
+            // Already imported - just show status
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('gameflow-status', {
+                state: 'EndOfGame',
+                message: 'Game ended - match already imported',
                 canAnalyze: false
               });
             }
           }
-
-          lastAnalyzedPlayers = null;
           break;
 
         case 'Reconnect':
