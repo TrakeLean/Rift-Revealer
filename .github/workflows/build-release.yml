@@ -31,6 +31,7 @@ jobs:
           files: |
             dist/Rift Revealer *.exe
             dist/Rift Revealer Setup *.exe
+            dist/latest.yml
           draft: false
           prerelease: false
           generate_release_notes: true

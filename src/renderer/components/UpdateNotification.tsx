@@ -8,39 +8,105 @@ import {
   DialogTitle,
 } from './ui/dialog'
 import { Button } from './ui/button'
-import { Download, X, Sparkles, ArrowRight } from 'lucide-react'
+import { Download, X, Sparkles, ArrowRight, Loader2, CheckCircle } from 'lucide-react'
+import { Progress } from './ui/progress'
 
 interface UpdateInfo {
   hasUpdate: boolean
   latestVersion: string
   currentVersion: string
-  downloadUrl: string
   releaseNotes: string
   releaseName: string
+  releaseDate?: string
+}
+
+interface DownloadProgress {
+  percent: number
+  transferred: number
+  total: number
+  bytesPerSecond: number
 }
 
 export function UpdateNotification() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
+  const [isDownloaded, setIsDownloaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const cleanup = window.api.onUpdateAvailable((info: UpdateInfo) => {
+    // Listen for update available
+    const cleanupAvailable = window.api.onUpdateAvailable((info: UpdateInfo) => {
       setUpdateInfo(info)
       setIsOpen(true)
+      setIsDownloading(false)
+      setIsDownloaded(false)
+      setError(null)
     })
 
-    return cleanup
+    // Listen for download progress
+    const cleanupProgress = window.api.onUpdateDownloadProgress((progress: DownloadProgress) => {
+      setDownloadProgress(progress)
+    })
+
+    // Listen for download complete
+    const cleanupDownloaded = window.api.onUpdateDownloaded(() => {
+      setIsDownloading(false)
+      setIsDownloaded(true)
+      setDownloadProgress(null)
+    })
+
+    // Listen for errors
+    const cleanupError = window.api.onUpdateError((errorData: { error: string }) => {
+      setError(errorData.error)
+      setIsDownloading(false)
+    })
+
+    return () => {
+      cleanupAvailable()
+      cleanupProgress()
+      cleanupDownloaded()
+      cleanupError()
+    }
   }, [])
 
   const handleDownload = async () => {
-    if (updateInfo?.downloadUrl) {
-      await window.api.openDownloadUrl(updateInfo.downloadUrl)
-      setIsOpen(false)
+    setIsDownloading(true)
+    setError(null)
+    try {
+      await window.api.downloadUpdate()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download update')
+      setIsDownloading(false)
+    }
+  }
+
+  const handleInstall = async () => {
+    try {
+      await window.api.installUpdate()
+      // App will restart automatically
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to install update')
     }
   }
 
   const handleClose = () => {
-    setIsOpen(false)
+    if (!isDownloading) {
+      setIsOpen(false)
+    }
+  }
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  const formatSpeed = (bytesPerSecond: number) => {
+    return formatBytes(bytesPerSecond) + '/s'
   }
 
   if (!updateInfo) return null
@@ -51,10 +117,13 @@ export function UpdateNotification() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-2xl">
             <Sparkles className="h-6 w-6 text-primary animate-pulse" />
-            New Update Available!
+            {isDownloaded ? 'Update Ready!' : 'New Update Available!'}
           </DialogTitle>
           <DialogDescription className="text-base">
-            A new version of Rift Revealer is ready to download
+            {isDownloaded
+              ? 'The update has been downloaded and is ready to install'
+              : 'A new version of Rift Revealer is ready to download'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -92,17 +161,65 @@ export function UpdateNotification() {
               </div>
             </div>
           )}
+
+          {/* Download progress */}
+          {isDownloading && downloadProgress && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Downloading...</span>
+                <span className="text-foreground">
+                  {formatBytes(downloadProgress.transferred)} / {formatBytes(downloadProgress.total)}
+                  {' '}({formatSpeed(downloadProgress.bytesPerSecond)})
+                </span>
+              </div>
+              <Progress value={downloadProgress.percent} className="h-2" />
+              <p className="text-xs text-center text-muted-foreground">
+                {Math.round(downloadProgress.percent)}%
+              </p>
+            </div>
+          )}
+
+          {/* Error message */}
+          {error && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={handleClose} className="gap-2">
-            <X className="h-4 w-4" />
-            Remind Me Later
-          </Button>
-          <Button onClick={handleDownload} className="gap-2 bg-primary hover:bg-primary/90">
-            <Download className="h-4 w-4" />
-            Download Update
-          </Button>
+          {!isDownloaded && !isDownloading && (
+            <>
+              <Button variant="ghost" onClick={handleClose} className="gap-2">
+                <X className="h-4 w-4" />
+                Remind Me Later
+              </Button>
+              <Button onClick={handleDownload} className="gap-2 bg-primary hover:bg-primary/90">
+                <Download className="h-4 w-4" />
+                Download Update
+              </Button>
+            </>
+          )}
+
+          {isDownloading && (
+            <Button disabled className="gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Downloading...
+            </Button>
+          )}
+
+          {isDownloaded && (
+            <>
+              <Button variant="ghost" onClick={handleClose} className="gap-2">
+                <X className="h-4 w-4" />
+                Install Later
+              </Button>
+              <Button onClick={handleInstall} className="gap-2 bg-primary hover:bg-primary/90">
+                <CheckCircle className="h-4 w-4" />
+                Install & Restart
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

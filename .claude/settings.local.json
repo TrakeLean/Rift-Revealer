@@ -46,7 +46,19 @@
       "Bash(git stash:*)",
       "Bash(git stash pop:*)",
       "Bash(git filter-branch:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(timeout /t 3 /nobreak)",
+      "Bash(gh release create v1.1.0 --title \"v1.1.0 - Auto-Update System & Custom Window\" --notes \"$(cat <<''EOF''\n## 🎉 What''s New in v1.1.0\n\n### ✨ Features\n\n**Automatic Update Checker**\n- 🔄 Checks for new versions automatically on app startup\n- 🔔 Beautiful notification dialog when updates are available\n- 📥 One-click download from GitHub releases\n- ⚙️ Toggle auto-update checks on/off in Settings\n- 🖱️ Manual \"Check for Updates\" button\n\n**Custom Window Design**\n- 🪟 Frameless window with integrated title bar controls\n- 🎯 Window controls (minimize, maximize, close) in the top-right\n- 🖐️ Draggable from both sidebar and main content area\n- 🎨 Sleek, modern look that matches the app theme\n\n### 🛠️ Technical Improvements\n- GitHub API integration for release checking\n- New database field for auto-update preferences\n- Enhanced Settings page with update controls\n- Improved window management and user experience\n\n### 📦 Installation\nDownload the executable below and run it. The app will automatically check for future updates!\n\n---\n\n💡 **Tip**: You can disable automatic update checks in Settings if you prefer to update manually.\nEOF\n)\")",
+      "Bash(git check-ignore:*)",
+      "Bash(gh release delete:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh release:*)",
+      "Bash(timeout /t 5 /nobreak)",
+      "Bash(git rm:*)",
+      "Bash(if [ -f \"logo.png\" ])",
+      "Bash(else echo \"not found\")",
+      "Bash(npx png-to-ico:*)",
+      "Bash(gh run view:*)"
     ],
     "deny": [],
     "ask": []

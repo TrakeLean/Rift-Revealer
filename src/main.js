@@ -1,17 +1,20 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const Database = require('./database/db');
 const RiotAPI = require('./api/riotApi');
 const LCUConnector = require('./api/lcuConnector');
-const UpdateChecker = require('./api/updateChecker');
 
 let mainWindow;
 let tray = null;
 let db;
 let riotApi;
 let lcuConnector;
-let updateChecker;
 let autoMonitorInterval = null;
+
+// Configure auto-updater
+autoUpdater.autoDownload = false; // We'll download manually after user confirmation
+autoUpdater.autoInstallOnAppQuit = true;
 
 // Gameflow state machine variables
 let currentGameflowState = null;
@@ -152,6 +155,56 @@ function createWindow() {
   });
 }
 
+// ========== Auto-Updater Event Handlers ==========
+
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for updates...');
+  mainWindow?.webContents.send('update-checking');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available:', info.version);
+  mainWindow?.webContents.send('update-available', {
+    hasUpdate: true,
+    latestVersion: info.version,
+    currentVersion: app.getVersion(),
+    releaseNotes: info.releaseNotes || 'No release notes available.',
+    releaseName: `Version ${info.version}`,
+    releaseDate: info.releaseDate
+  });
+});
+
+autoUpdater.on('update-not-available', (info) => {
+  console.log('Update not available. Current version:', info.version);
+  mainWindow?.webContents.send('update-not-available', {
+    currentVersion: app.getVersion()
+  });
+});
+
+autoUpdater.on('error', (error) => {
+  console.error('Update error:', error);
+  mainWindow?.webContents.send('update-error', {
+    error: error.message
+  });
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  console.log(`Download progress: ${progressObj.percent}%`);
+  mainWindow?.webContents.send('update-download-progress', {
+    percent: progressObj.percent,
+    transferred: progressObj.transferred,
+    total: progressObj.total,
+    bytesPerSecond: progressObj.bytesPerSecond
+  });
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded:', info.version);
+  mainWindow?.webContents.send('update-downloaded', {
+    version: info.version
+  });
+});
+
 app.whenReady().then(() => {
   console.log('=== APP READY ===');
   console.log('App path:', app.getAppPath());
@@ -171,9 +224,6 @@ app.whenReady().then(() => {
 
     lcuConnector = new LCUConnector();
     console.log('LCUConnector initialized');
-
-    updateChecker = new UpdateChecker();
-    console.log('UpdateChecker initialized');
 
     console.log('Creating system tray...');
     createTray();
@@ -797,7 +847,7 @@ ipcMain.handle('get-all-tagged-players', async () => {
   }
 });
 
-// ========== Update Checker IPC Handlers ==========
+// ========== Auto-Updater IPC Handlers ==========
 
 /**
  * Check for updates on startup if enabled
@@ -807,19 +857,11 @@ async function checkForUpdatesOnStartup() {
     const config = db.getUserConfig();
     const autoUpdateCheckEnabled = config?.auto_update_check !== 0; // Default to true if not set
 
-    if (autoUpdateCheckEnabled) {
+    if (autoUpdateCheckEnabled && app.isPackaged) {
       console.log('Checking for updates on startup...');
-      const updateInfo = await updateChecker.checkForUpdates();
-
-      if (updateInfo.hasUpdate) {
-        console.log(`Update available: ${updateInfo.latestVersion}`);
-        // Send update notification to renderer
-        mainWindow.webContents.send('update-available', updateInfo);
-      } else {
-        console.log('No updates available');
-      }
+      autoUpdater.checkForUpdates();
     } else {
-      console.log('Auto-update check is disabled');
+      console.log('Auto-update check is disabled or running in dev mode');
     }
   } catch (error) {
     console.error('Error checking for updates on startup:', error);
@@ -828,8 +870,14 @@ async function checkForUpdatesOnStartup() {
 
 ipcMain.handle('check-for-updates', async () => {
   try {
-    const updateInfo = await updateChecker.checkForUpdates();
-    return { success: true, ...updateInfo };
+    if (!app.isPackaged) {
+      return {
+        success: false,
+        error: 'Updates are only available in packaged builds'
+      };
+    }
+    await autoUpdater.checkForUpdates();
+    return { success: true };
   } catch (error) {
     console.error('Failed to check for updates:', error);
     return { success: false, error: error.message };
@@ -846,12 +894,30 @@ ipcMain.handle('set-auto-update-check', async (event, enabled) => {
   }
 });
 
-ipcMain.handle('open-download-url', async (event, url) => {
+// Download the update (called when user clicks "Download Update")
+ipcMain.handle('download-update', async () => {
   try {
-    await shell.openExternal(url);
+    if (!app.isPackaged) {
+      return {
+        success: false,
+        error: 'Updates are only available in packaged builds'
+      };
+    }
+    await autoUpdater.downloadUpdate();
     return { success: true };
   } catch (error) {
-    console.error('Failed to open download URL:', error);
+    console.error('Failed to download update:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Install the downloaded update and restart
+ipcMain.handle('install-update', async () => {
+  try {
+    autoUpdater.quitAndInstall(false, true);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to install update:', error);
     return { success: false, error: error.message };
   }
 });
