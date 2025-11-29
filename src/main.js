@@ -233,11 +233,11 @@ autoUpdater.on('update-downloaded', (info) => {
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  // Another instance is already running, quit this one
+  // Another instance is already running, quit this one immediately
   console.log('Another instance is already running. Exiting...');
   app.quit();
 } else {
-  // This is the first instance
+  // This is the first instance - set up event handlers and initialization
   app.on('second-instance', (event, commandLine, workingDirectory) => {
     // Someone tried to run a second instance, focus our window instead
     console.log('Second instance attempted. Focusing existing window...');
@@ -249,9 +249,8 @@ if (!gotTheLock) {
       mainWindow.focus();
     }
   });
-}
 
-app.whenReady().then(() => {
+  app.whenReady().then(() => {
   console.log('=== APP READY ===');
   console.log('App path:', app.getAppPath());
   console.log('User data:', app.getPath('userData'));
@@ -301,19 +300,20 @@ app.whenReady().then(() => {
   dialog.showErrorBox('Startup Error', `App failed to start: ${err.message}`);
 });
 
-app.on('window-all-closed', () => {
-  // Don't quit the app - keep running in tray
-  // Users can quit from the tray menu
-});
+  app.on('window-all-closed', () => {
+    // Don't quit the app - keep running in tray
+    // Users can quit from the tray menu
+  });
 
-app.on('before-quit', () => {
-  // Clean up auto-monitor interval
-  if (autoMonitorInterval) {
-    clearInterval(autoMonitorInterval);
-    autoMonitorInterval = null;
-    lastLobbyHash = null;
-  }
-});
+  app.on('before-quit', () => {
+    // Clean up auto-monitor interval
+    if (autoMonitorInterval) {
+      clearInterval(autoMonitorInterval);
+      autoMonitorInterval = null;
+      lastLobbyHash = null;
+    }
+  });
+}
 
 // IPC Handlers
 
