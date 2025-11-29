@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Settings as SettingsPage } from './pages/Settings'
 import { MatchHistory } from './pages/MatchHistory'
 import { LobbyAnalysis } from './pages/LobbyAnalysis'
@@ -12,6 +12,11 @@ type Page = 'lobby' | 'history' | 'settings'
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('lobby')
+  const [appVersion, setAppVersion] = useState<string>('...')
+
+  useEffect(() => {
+    window.api.getAppVersion().then(setAppVersion)
+  }, [])
 
   const navigationItems = [
     { id: 'lobby' as Page, label: 'Lobby Analysis', icon: Home },
@@ -77,7 +82,7 @@ function App() {
             />
           </div>
           <p className="text-xs text-muted-foreground text-center">
-            V1.2.0 - Made by TrakeLean
+            v{appVersion} - Made by TrakeLean
           </p>
         </div>
       </aside>
