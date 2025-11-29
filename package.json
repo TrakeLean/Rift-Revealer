@@ -1,6 +1,6 @@
 {
   "name": "rift-revealer",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "Rift Revealer - League of Legends lobby analyzer",
   "main": "src/main.js",
   "scripts": {
@@ -60,7 +60,7 @@
   },
   "build": {
     "appId": "com.riftrevealer.app",
-    "productName": "Rift Revealer",
+    "productName": "Rift.Revealer",
     "publish": {
       "provider": "github",
       "owner": "TrakeLean",

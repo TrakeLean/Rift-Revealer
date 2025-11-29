@@ -5,6 +5,13 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.5] - 2025-01-29
+
+### Fixed
+- Update notification now downloads the correct installer file (Rift.Revealer.Setup.X.X.X.exe) instead of the portable version
+- Release notes now show actual changes from CHANGELOG.md instead of generic template
+- GitHub Actions workflow now extracts version-specific changelog entries for releases
+
 ## [1.1.1] - 2025-01-28
 
 ### Fixed

@@ -61,10 +61,10 @@ class UpdateChecker {
 
       const hasUpdate = this.compareVersions(latestVersion, currentVersion) > 0;
 
-      // Find the Windows executable download URL
+      // Find the Windows Setup installer download URL
       let downloadUrl = latestRelease.html_url; // Default to release page
       const windowsAsset = latestRelease.assets?.find(asset =>
-        asset.name.includes('.exe') && !asset.name.includes('Setup')
+        asset.name.includes('Setup') && asset.name.endsWith('.exe')
       );
 
       if (windowsAsset) {

@@ -60,28 +60,29 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          # Extract the section for this version from CHANGELOG.md
+          if [ -f "CHANGELOG.md" ]; then
+            # Get content between the version header and the next version header
+            CHANGELOG=$(awk '/## \['"$VERSION"'\]/{flag=1; next} /## \[/{flag=0} flag' CHANGELOG.md)
+            if [ -n "$CHANGELOG" ]; then
+              # Save to file to preserve newlines
+              echo "$CHANGELOG" > changelog_section.txt
+            else
+              echo "No changelog entry found for version $VERSION" > changelog_section.txt
+            fi
+          else
+            echo "See [CHANGELOG.md](https://github.com/TrakeLean/Rift-Revealer/blob/main/CHANGELOG.md) for details." > changelog_section.txt
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           name: Rift Revealer v${{ steps.version.outputs.VERSION }}
-          body: |
-            ## 🎮 Rift Revealer v${{ steps.version.outputs.VERSION }}
-
-            ### 📥 Downloads
-            - **Installer** (`Rift Revealer Setup ${{ steps.version.outputs.VERSION }}.exe`) - Recommended
-            - **Portable** (`Rift Revealer ${{ steps.version.outputs.VERSION }}.exe`) - No installation
-
-            ### 📝 What's New
-            See [CHANGELOG.md](https://github.com/TrakeLean/Rift-Revealer/blob/main/CHANGELOG.md) for details.
-
-            ### ⚠️ Requirements
-            - Windows 10/11 (64-bit)
-            - League of Legends installed
-            - Riot Games API Key ([Get one here](https://developer.riotgames.com))
-
-            ---
-
-            **Full Changelog**: https://github.com/TrakeLean/Rift-Revealer/compare/${{ github.event.before }}...${{ github.sha }}
+          body_path: changelog_section.txt
           files: |
             dist/*.exe
           draft: false
