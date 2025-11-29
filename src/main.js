@@ -289,6 +289,10 @@ ipcMain.handle('window-close', () => {
   mainWindow?.close();
 });
 
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 ipcMain.handle('get-user-config', async () => {
   return db.getUserConfig();
 });

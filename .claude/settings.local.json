@@ -58,7 +58,8 @@
       "Bash(if [ -f \"logo.png\" ])",
       "Bash(else echo \"not found\")",
       "Bash(npx png-to-ico:*)",
-      "Bash(gh run view:*)"
+      "Bash(gh run view:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []
