@@ -1,7 +1,7 @@
 -- User configuration table
 CREATE TABLE IF NOT EXISTS user_config (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    puuid TEXT NOT NULL,
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    puuid TEXT NOT NULL UNIQUE,
     summoner_name TEXT NOT NULL,
     region TEXT NOT NULL,
     riot_api_key TEXT,
@@ -16,8 +16,7 @@ CREATE TABLE IF NOT EXISTS players (
     summoner_name TEXT NOT NULL,
     region TEXT NOT NULL,
     last_seen INTEGER,
-    profile_icon_id INTEGER,
-    skin_id INTEGER
+    profile_icon_id INTEGER
 );
 
 -- Matches table
@@ -43,14 +42,7 @@ CREATE TABLE IF NOT EXISTS match_participants (
     deaths INTEGER,
     assists INTEGER,
     win INTEGER,
-    total_damage_dealt INTEGER,
-    total_damage_to_champions INTEGER,
-    total_minions_killed INTEGER,
-    gold_earned INTEGER,
-    role TEXT,
     lane TEXT,
-    team_position TEXT,
-    profile_icon_id INTEGER,
     FOREIGN KEY (match_id) REFERENCES matches(match_id),
     FOREIGN KEY (puuid) REFERENCES players(puuid)
 );

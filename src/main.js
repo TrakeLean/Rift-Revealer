@@ -1,6 +1,9 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
+const fs = require('fs');
+const https = require('https');
+const { pathToFileURL } = require('url');
 const Database = require('./database/db');
 const RiotAPI = require('./api/riotApi');
 const LCUConnector = require('./api/lcuConnector');
@@ -47,6 +50,152 @@ const QUEUE_NAMES = {
   1900: 'Pick URF',
   3140: 'Practice Tool'
 };
+
+// ======== Skin cache helpers ========
+function getSkinCacheDir() {
+  const dir = path.join(app.getPath('userData'), 'skin-cache');
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+function findCachedSkinFile(skinId) {
+  // Check database record first
+  try {
+    const entry = db?.getSkinCacheEntry(skinId);
+    if (entry && entry.file_path && fs.existsSync(entry.file_path)) {
+      return entry.file_path;
+    }
+  } catch (err) {
+    // Non-fatal
+    console.error('Skin cache DB lookup failed:', err.message);
+  }
+
+  const dir = getSkinCacheDir();
+  const exts = ['.jpg', '.jpeg', '.png', '.webp'];
+  for (const ext of exts) {
+    const candidate = path.join(dir, `${skinId}${ext}`);
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  // Last resort: find any file that starts with the skinId (covers unexpected extensions)
+  const files = fs.readdirSync(dir).filter(f => f.startsWith(`${skinId}.`));
+  if (files.length > 0) {
+    return path.join(dir, files[0]);
+  }
+  return null;
+}
+
+async function fetchAndCacheSkinImage(skinId, championId) {
+  if (skinId === null || skinId === undefined || championId === null || championId === undefined) {
+    return null;
+  }
+
+  if (!lcuConnector) {
+    return null;
+  }
+
+  // Refresh credentials if needed
+  if (!lcuConnector.credentials) {
+    const creds = lcuConnector.findLeagueClientCredentials();
+    if (!creds) {
+      return null;
+    }
+    lcuConnector.credentials = creds;
+  }
+
+  // Get champion skin metadata
+  let champData;
+  try {
+    champData = await lcuConnector.makeRequest(`/lol-game-data/assets/v1/champions/${championId}.json`);
+  } catch (err) {
+    console.error('Failed to fetch champion data for skin cache:', err.message);
+    return null;
+  }
+
+  if (!champData || !Array.isArray(champData.skins)) {
+    return null;
+  }
+
+  const skin =
+    champData.skins.find(s => s.id === skinId) ||
+    champData.skins.find(s => (s.id % 1000) === (skinId % 1000));
+
+  if (!skin) {
+    return null;
+  }
+
+  const tilePath = skin.tilePath || skin.splashPath || skin.uncenteredSplashPath;
+  if (!tilePath) {
+    return null;
+  }
+
+  const ext = path.extname(tilePath) || '.jpg';
+  const targetPath = path.join(getSkinCacheDir(), `${skinId}${ext}`);
+  if (fs.existsSync(targetPath)) {
+    return targetPath;
+  }
+
+  const auth = Buffer.from(`riot:${lcuConnector.credentials.token}`).toString('base64');
+
+  await new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: '127.0.0.1',
+        port: lcuConnector.credentials.port,
+        path: tilePath,
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${auth}`
+        },
+        rejectUnauthorized: false
+      },
+      res => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`Skin asset request failed with status ${res.statusCode}`));
+        }
+        const fileStream = fs.createWriteStream(targetPath);
+        res.pipe(fileStream);
+        fileStream.on('finish', () => {
+          fileStream.close(resolve);
+        });
+        fileStream.on('error', err => {
+          fileStream.close();
+          reject(err);
+        });
+      }
+    );
+
+    req.on('error', reject);
+    req.end();
+  });
+
+  return targetPath;
+}
+
+async function getSkinImagePath(skinId, championId) {
+  // 1) cached
+  const cached = findCachedSkinFile(skinId);
+  if (cached) {
+    return pathToFileURL(cached).href;
+  }
+
+  // 2) fetch and cache if possible
+  const downloaded = await fetchAndCacheSkinImage(skinId, championId);
+  if (downloaded) {
+    try {
+      db?.upsertSkinCacheEntry(skinId, championId, downloaded);
+    } catch (err) {
+      console.error('Failed to record skin cache entry:', err.message);
+    }
+    return pathToFileURL(downloaded).href;
+  }
+
+  return null;
+}
 
 // Helper to get queue name
 function getQueueName(queueId) {
@@ -367,6 +516,45 @@ ipcMain.handle('get-last-match-roster', async () => {
   }
 });
 
+ipcMain.handle('get-skin-image', async (event, skinId, championId) => {
+  try {
+    const resolvedPath = await getSkinImagePath(skinId, championId);
+    if (!resolvedPath) {
+      return { success: false, error: 'Skin image not available' };
+    }
+    return { success: true, path: resolvedPath };
+  } catch (error) {
+    console.error('Failed to get skin image:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('clear-skin-cache', async () => {
+  try {
+    const dir = getSkinCacheDir();
+    let removed = 0;
+    if (fs.existsSync(dir)) {
+      for (const file of fs.readdirSync(dir)) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile()) {
+          fs.unlinkSync(fullPath);
+          removed++;
+        }
+      }
+    }
+    try {
+      db?.clearSkinCache();
+    } catch (err) {
+      console.error('Failed to clear skin cache table:', err.message);
+    }
+    return { success: true, removed };
+  } catch (error) {
+    console.error('Failed to clear skin cache:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('diagnose-database', async () => {
   try {
     const config = db.getUserConfig();
@@ -526,7 +714,7 @@ ipcMain.handle('analyze-lobby', async () => {
           const transformedGames = history.games.map(g => ({
             gameId: g.match_id,
             champion: g.opponent_champion,
-            role: g.team_position,
+            role: g.opponent_team_position || g.opponent_lane || null,
             outcome: g.user_win === 1 ? 'win' : 'loss',
             kda: {
               kills: g.opponent_kills,
@@ -603,8 +791,7 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
           player.puuid,
           player.summonerName,
           config.region,
-          player.profileIconId || null,
-          player.skinId || null
+          player.profileIconId || null
         );
       } catch (err) {
         console.log('Warning: failed to save player cosmetic info:', err.message);
@@ -614,7 +801,7 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
         const transformedGames = history.games.map(g => ({
           gameId: g.match_id,
           champion: g.opponent_champion,
-          role: g.team_position,
+          role: g.opponent_team_position || g.opponent_lane || null,
           outcome: g.user_win === 1 ? 'win' : 'loss',
           kda: {
             kills: g.opponent_kills,
