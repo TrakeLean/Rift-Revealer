@@ -1,11 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { PlayerChip } from '@/components/PlayerChip'
 import { StatsPanel } from '@/components/StatsPanel'
 import { MatchCard } from '@/components/MatchCard'
-import { Activity, CheckCircle2, Clock, AlertCircle, Gamepad2 } from 'lucide-react'
+import { Activity, CheckCircle2, Clock, AlertCircle, Gamepad2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AnalysisResult } from '../types'
+
+// Map normalized state to a status tone
+const getStatusTone = (normalized: string, isAnonymized?: boolean): 'success' | 'error' | 'info' | 'warning' => {
+  if (normalized === 'clientclosed') return 'error'
+  if (normalized === 'inprogress' || normalized === 'gamestart') return 'success'
+  if (normalized === 'endofgame' || normalized === 'waitingforstats' || normalized === 'preendofgame') return 'info'
+  if (normalized === 'reconnect' || isAnonymized) return 'warning'
+  return 'info'
+}
 
 export function LobbyAnalysis() {
   const [detectedPlayers, setDetectedPlayers] = useState<AnalysisResult[]>([])
@@ -18,28 +27,65 @@ export function LobbyAnalysis() {
     queueId?: number
     queueName?: string
   } | null>(null)
+  const [bubbleExpanded, setBubbleExpanded] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
+  const bubbleTimer = useRef<NodeJS.Timeout | null>(null)
+  const lastStatusKey = useRef<string | null>(null)
+
+  const clearBubbleTimer = () => {
+    if (bubbleTimer.current) {
+      clearTimeout(bubbleTimer.current)
+      bubbleTimer.current = null
+    }
+  }
+
+  const triggerAutoBubble = () => {
+    setManualOpen(false)
+    setBubbleExpanded(true)
+    clearBubbleTimer()
+    bubbleTimer.current = setTimeout(() => {
+      setBubbleExpanded(false)
+      bubbleTimer.current = null
+    }, 5000)
+  }
 
   useEffect(() => {
     // Listen for gameflow status updates
     const cleanupStatus = window.api.onGameflowStatus((data) => {
       setGameflowStatus(data)
 
-      // Update status message based on gameflow
-      if (data.isAnonymized) {
-        setStatus({
-          message: data.message,
-          type: 'warning'
-        })
-      } else if (data.state === 'InProgress') {
-        setStatus({
-          message: data.message,
-          type: 'success'
-        })
-      } else if (data.state === 'EndOfGame') {
-        setStatus({
-          message: data.message,
-          type: 'info'
-        })
+      const stateRaw = data.state || ''
+      const normalized = stateRaw.trim().toLowerCase()
+      const tone = getStatusTone(normalized, data.isAnonymized)
+      const queueName = data.queueName || 'queue'
+      const defaultMessage =
+        data.message ||
+        (normalized === 'clientclosed'
+          ? 'League client not detected. Open it to start monitoring.'
+          : normalized === 'none'
+          ? 'League client ready — waiting for lobby or champion select.'
+          : normalized === 'matchmaking'
+          ? `Searching for a match (${queueName}).`
+          : normalized === 'readycheck'
+          ? 'Ready check — accept to enter champion select.'
+          : normalized === 'champselect'
+          ? 'Champion select detected.'
+          : normalized === 'inprogress'
+          ? 'In game.'
+          : normalized === 'lobby'
+          ? 'Waiting for champion select.'
+          : 'Monitoring lobby and game states.')
+
+      setStatus({
+        message: defaultMessage,
+        type: tone
+      })
+
+      // Auto-show bubble on new status (ignore identical repeats)
+      const statusKey = `${normalized}|${defaultMessage}`
+      if (statusKey !== lastStatusKey.current) {
+        lastStatusKey.current = statusKey
+        triggerAutoBubble()
       }
     })
 
@@ -82,16 +128,22 @@ export function LobbyAnalysis() {
     }
   }, [])
 
+  useEffect(() => {
+    return () => clearBubbleTimer()
+  }, [])
+
   const togglePlayerExpansion = (summonerName: string) => {
     setExpandedPlayer(expandedPlayer === summonerName ? null : summonerName)
   }
 
-  // Helper to get state info
+  // Single source of truth for state info
   const getStateInfo = () => {
-    if (!gameflowStatus) {
+    const statusData = gameflowStatus
+    if (!statusData) {
       return {
         icon: Clock,
         label: 'Waiting for League Client',
+        description: 'Open the League client to start monitoring.',
         color: 'text-muted-foreground',
         bgColor: 'bg-muted/20',
         borderColor: 'border-muted',
@@ -99,128 +151,146 @@ export function LobbyAnalysis() {
       }
     }
 
-    const state = gameflowStatus.state
+    const stateRaw = statusData.state || ''
+    const normalized = stateRaw.trim().toLowerCase()
 
-    if (state === 'ChampSelect') {
+    if (normalized === 'clientclosed') {
       return {
-        icon: Activity,
-        label: gameflowStatus.isAnonymized
-          ? `${gameflowStatus.queueName} - Waiting for names...`
-          : `Champion Select - ${gameflowStatus.queueName}`,
-        color: 'text-blue-400',
-        bgColor: 'bg-blue-950/20',
-        borderColor: 'border-blue-900/30',
-        pulse: true
-      }
-    }
-
-    if (state === 'InProgress') {
-      return {
-        icon: Gamepad2,
-        label: `In Game - ${gameflowStatus.queueName || 'Active'}`,
-        color: 'text-emerald-400',
-        bgColor: 'bg-emerald-950/20',
-        borderColor: 'border-emerald-900/30',
+        icon: AlertCircle,
+        label: 'League Client Closed',
+        description: statusData.message || 'Open the League client to start monitoring.',
+        color: 'text-red-400',
+        bgColor: 'bg-red-500/15',
+        borderColor: 'border-red-500/50',
         pulse: false
       }
     }
 
-    if (state === 'EndOfGame') {
+    if (normalized === 'champselect' || normalized === 'champ select' || normalized === 'championselect') {
+      return {
+        icon: Activity,
+        label: statusData.isAnonymized
+          ? `${statusData.queueName} - Waiting for names...`
+          : `Champion Select - ${statusData.queueName}`,
+        description: statusData.isAnonymized
+          ? 'Names are hidden; analysis will run once the game starts.'
+          : 'Names detected; analysis will update as picks lock in.',
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/20',
+        borderColor: 'border-blue-500/50',
+        pulse: true
+      }
+    }
+
+    if (normalized === 'inprogress' || normalized === 'gamestart') {
+      return {
+        icon: Gamepad2,
+        label: `In Game - ${statusData.queueName || 'Active'}`,
+        description: statusData.message || 'Analysis completed for this match.',
+        color: 'text-emerald-400',
+        bgColor: 'bg-emerald-500/20',
+        borderColor: 'border-emerald-500/50',
+        pulse: false
+      }
+    }
+
+    if (normalized === 'endofgame' || normalized === 'waitingforstats' || normalized === 'preendofgame') {
       return {
         icon: CheckCircle2,
         label: 'Game Ended - Importing...',
+        description: statusData.message || 'Importing the latest match automatically.',
         color: 'text-yellow-400',
-        bgColor: 'bg-yellow-950/20',
-        borderColor: 'border-yellow-900/30',
+        bgColor: 'bg-yellow-500/25',
+        borderColor: 'border-yellow-500/50',
         pulse: false
       }
     }
 
-    if (state === 'Reconnect') {
+    if (normalized === 'reconnect') {
       return {
         icon: AlertCircle,
         label: 'Reconnecting to Game',
+        description: statusData.message || 'Client reconnecting; analysis will resume.',
         color: 'text-red-400',
-        bgColor: 'bg-red-950/20',
-        borderColor: 'border-red-900/30',
+        bgColor: 'bg-red-500/20',
+        borderColor: 'border-red-500/50',
         pulse: true
       }
     }
 
-    // Lobby, Matchmaking, ReadyCheck, etc.
+    const baseDescription = statusData.message || 'League client ready — waiting for lobby or champion select.'
+    if (normalized === 'matchmaking') {
+      return {
+        icon: Activity,
+        label: 'Searching for a Match',
+        description: baseDescription,
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/20',
+        borderColor: 'border-blue-500/50',
+        pulse: true
+      }
+    }
+
+    if (normalized === 'readycheck') {
+      return {
+        icon: AlertCircle,
+        label: 'Ready Check',
+        description: baseDescription,
+        color: 'text-yellow-400',
+        bgColor: 'bg-yellow-500/25',
+        borderColor: 'border-yellow-500/50',
+        pulse: true
+      }
+    }
+
+    if (normalized === 'lobby') {
+      return {
+        icon: Users,
+        label: 'Lobby Open',
+        description: baseDescription,
+        color: 'text-blue-400',
+        bgColor: 'bg-blue-500/20',
+        borderColor: 'border-blue-500/50',
+        pulse: false
+      }
+    }
+
     return {
       icon: Clock,
-      label: 'In Lobby - Waiting for game...',
+      label: 'League Client Ready',
+      description: baseDescription,
       color: 'text-muted-foreground',
-      bgColor: 'bg-muted/20',
-      borderColor: 'border-muted',
+      bgColor: 'bg-blue-500/15',
+      borderColor: 'border-blue-500/40',
       pulse: false
     }
   }
 
   const stateInfo = getStateInfo()
   const StateIcon = stateInfo.icon
+  const bubbleTone = (() => {
+    const color = stateInfo.color
+    if (color.includes('text-blue')) return { bg: 'bg-blue-500/25' }
+    if (color.includes('text-emerald')) return { bg: 'bg-emerald-500/25' }
+    if (color.includes('text-yellow')) return { bg: 'bg-yellow-500/30' }
+    if (color.includes('text-red')) return { bg: 'bg-red-500/25' }
+    if (color.includes('text-muted')) return { bg: 'bg-blue-400/20' }
+    return { bg: 'bg-blue-400/20' }
+  })()
+  const handleBubbleClick = () => {
+    if (bubbleExpanded) {
+      clearBubbleTimer()
+      setBubbleExpanded(false)
+      setManualOpen(false)
+    } else {
+      clearBubbleTimer()
+      setBubbleExpanded(true)
+      setManualOpen(true) // stay open until clicked or new status arrives
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {/* Status Dashboard */}
-      <Card className={cn("border-l-4", stateInfo.borderColor)}>
-        <CardContent className="p-6">
-          <div className="flex items-center gap-4">
-            <div className={cn(
-              "p-3 rounded-lg",
-              stateInfo.bgColor
-            )}>
-              <StateIcon className={cn("h-6 w-6", stateInfo.color)} />
-            </div>
-
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold">{stateInfo.label}</h3>
-                {stateInfo.pulse && (
-                  <div className={cn(
-                    "h-2 w-2 rounded-full animate-pulse",
-                    stateInfo.color.replace('text-', 'bg-')
-                  )} />
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Automatic monitoring active • Analysis runs when lobby detected
-              </p>
-            </div>
-
-            {detectedPlayers.length > 0 && (
-              <div className={cn(
-                "px-4 py-2 rounded-md border",
-                "bg-primary/10 border-primary/30"
-              )}>
-                <div className="text-2xl font-bold text-primary">
-                  {detectedPlayers.length}
-                </div>
-                <div className="text-[10px] text-muted-foreground uppercase">
-                  Detected
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Status Message */}
-          {status && (
-            <div
-              className={cn(
-                "flex items-center gap-2 p-3 rounded-md text-sm mt-4",
-                status.type === 'success' && 'bg-emerald-950/50 text-emerald-400 border border-emerald-900',
-                status.type === 'error' && 'bg-red-950/50 text-red-400 border border-red-900',
-                status.type === 'warning' && 'bg-yellow-950/50 text-yellow-400 border border-yellow-900',
-                status.type === 'info' && 'bg-blue-950/50 text-blue-400 border border-blue-900'
-              )}
-            >
-              <span>{status.message}</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Detection Alert */}
       {detectedPlayers.length > 0 && (
         <Card className="border-l-4 border-l-primary">
@@ -315,6 +385,40 @@ export function LobbyAnalysis() {
           )}
         </CardContent>
       </Card>
+
+      {/* Floating status bubble */}
+      <div className="fixed bottom-4 right-4 z-50">
+        <button
+          onClick={handleBubbleClick}
+          className={cn(
+            "flex items-center gap-3 rounded-full shadow-lg transition-all backdrop-blur-sm",
+            bubbleExpanded ? "px-3 py-2" : "p-3",
+            bubbleTone.bg,
+            "hover:border-primary/50",
+            !bubbleExpanded && "opacity-95"
+          )}
+          >
+          <div className="flex items-center justify-center h-10 w-10 rounded-full shadow-sm">
+            <StateIcon className={cn("h-6 w-6", stateInfo.color)} />
+          </div>
+
+          {bubbleExpanded && (
+            <div className="flex flex-col text-left min-w-[12rem] max-w-md">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {stateInfo.label}
+                </span>
+                {stateInfo.pulse && (
+                  <span className={cn("h-1.5 w-1.5 rounded-full animate-pulse", stateInfo.color.replace("text-", "bg-"))} />
+                )}
+              </div>
+              <span className="text-sm text-foreground">
+                {status?.message || stateInfo.description || "Monitoring lobby and game states."}
+              </span>
+            </div>
+          )}
+        </button>
+      </div>
     </div>
   )
 }
