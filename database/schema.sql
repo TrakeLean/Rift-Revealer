@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS players (
     summoner_name TEXT NOT NULL,
     region TEXT NOT NULL,
     last_seen INTEGER,
-    profile_icon_id INTEGER
+    profile_icon_id INTEGER,
+    skin_id INTEGER
 );
 
 -- Matches table

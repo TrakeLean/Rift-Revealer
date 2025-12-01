@@ -498,7 +498,7 @@ export function LobbyAnalysis() {
     const isSelected = expandedPlayer === player.summonerName
 
     return (
-      <div key={key} className="space-y-2">
+      <div key={key} className="space-y-2 h-full">
         <PlayerChip
           puuid={player.puuid}
           summonerName={player.summonerName}
@@ -517,7 +517,7 @@ export function LobbyAnalysis() {
           byMode={player.byMode || undefined}
           onClick={hasDetails ? () => togglePlayerExpansion(player.summonerName) : undefined}
           isExpanded={isSelected}
-          className={cn(isSelected && "ring-1 ring-primary/60")}
+          className={cn("h-full", isSelected && "ring-1 ring-primary/60")}
         />
       </div>
     )
@@ -711,41 +711,39 @@ export function LobbyAnalysis() {
       )}
 
 
-      {/* Floating status bubble (disabled while roster expansion is active) */}
-      {!expandedPlayer && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <button
-            onClick={handleBubbleClick}
-            className={cn(
-              "flex items-center gap-3 rounded-full shadow-lg transition-all backdrop-blur-sm",
-              bubbleExpanded ? "px-3 py-2" : "p-3",
-              bubbleTone.bg,
-              "hover:border-primary/50",
-              !bubbleExpanded && "opacity-95"
-            )}
-            >
-            <div className="flex items-center justify-center h-10 w-10 rounded-full shadow-sm">
-              <StateIcon className={cn("h-6 w-6", stateInfo.color)} />
-            </div>
+      {/* Floating status bubble */}
+      <div className="fixed bottom-4 right-4 z-50">
+        <button
+          onClick={handleBubbleClick}
+          className={cn(
+            "flex items-center gap-3 rounded-full shadow-lg transition-all backdrop-blur-sm",
+            bubbleExpanded ? "px-3 py-2" : "p-3",
+            bubbleTone.bg,
+            "hover:border-primary/50",
+            !bubbleExpanded && "opacity-95"
+          )}
+          >
+          <div className="flex items-center justify-center h-10 w-10 rounded-full shadow-sm">
+            <StateIcon className={cn("h-6 w-6", stateInfo.color)} />
+          </div>
 
-            {bubbleExpanded && (
-              <div className="flex flex-col text-left min-w-[12rem] max-w-md">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {stateInfo.label}
-                  </span>
-                  {stateInfo.pulse && (
-                    <span className={cn("h-1.5 w-1.5 rounded-full animate-pulse", stateInfo.color.replace("text-", "bg-"))} />
-                  )}
-                </div>
-                <span className="text-sm text-foreground">
-                  {status?.message || stateInfo.description || "Monitoring lobby and game states."}
+          {bubbleExpanded && (
+            <div className="flex flex-col text-left min-w-[12rem] max-w-md">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {stateInfo.label}
                 </span>
+                {stateInfo.pulse && (
+                  <span className={cn("h-1.5 w-1.5 rounded-full animate-pulse", stateInfo.color.replace("text-", "bg-"))} />
+                )}
               </div>
-            )}
-          </button>
-        </div>
-      )}
+              <span className="text-sm text-foreground">
+                {status?.message || stateInfo.description || "Monitoring lobby and game states."}
+              </span>
+            </div>
+          )}
+        </button>
+      </div>
     </div>
   )
 }

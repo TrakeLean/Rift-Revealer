@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('import-progress', handler);
     return () => ipcRenderer.removeListener('import-progress', handler);
   },
+  cancelImportMatchHistory: () => ipcRenderer.send('cancel-import-match-history'),
   onGameflowStateChange: (callback) => {
     const handler = (event, data) => callback(data);
     ipcRenderer.on('gameflow-state-change', handler);
@@ -37,6 +38,7 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('game-auto-imported', handler);
   },
   diagnoseDatabase: () => ipcRenderer.invoke('diagnose-database'),
+  getLastMatchRoster: () => ipcRenderer.invoke('get-last-match-roster'),
 
   // Player tagging API
   addPlayerTag: (puuid, summonerName, tagType, note) => ipcRenderer.invoke('add-player-tag', puuid, summonerName, tagType, note),

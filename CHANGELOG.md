@@ -9,13 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Settings page now includes an Import Last 100 Matches action with progress details and a cancel flow that reaches down to the Riot API import loop.
-- Role breakdowns were added to stats and the mock data now mirrors them for Dev Playground previews.
+- Skin support for players in live lobbies and last-match roster: skins saved from LCU, matched to `public/tiles`, and used as avatars with profile/champion fallbacks.
+- Last-match roster shows full encounter stats (ally/enemy splits, mode badges, recent games) using the same PlayerChip styling as live cards.
 
 ### Changed
 - Lobby status UI rebuilt with a floating bubble that auto-expands on new gameflow events, collapses after 5 seconds, and uses state-specific tinting and labels.
 - Gameflow states are normalized (client closed, lobby, matchmaking, ready check, champ select, in-progress, end of game, reconnect) with consistent messaging and Practice Tool queue naming.
 - Navigation moved to the top bar, the sidebar was removed, Settings is now a tab, and the Match History tab was removed.
 - Player tag UX on player cards improved with a clearer tag button, hover notes, and better tooltip sizing.
+- Lobby analysis player cards now display more info in a clearer, easier-to-scan layout.
+
+### Fixed
+- Player tagging now correctly saves tags (including notes) for players you have encountered.
+- Gameflow detection logic is more reliable at identifying lobby, champ select, in-game, and other states.
+- Last-match roster expansion now renders inline with rows at full width, avoiding cramped layouts and keeping card heights consistent.
 
 ## [1.4.8] - 2025-01-29
 

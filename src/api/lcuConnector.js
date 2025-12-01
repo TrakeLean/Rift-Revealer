@@ -155,16 +155,18 @@ class LCUConnector {
               summonerName = summoner.displayName;
             }
 
-            players.push({
-              summonerId: team.summonerId,
-              puuid: summoner.puuid,
-              summonerName: summonerName,
-              championId: team.championId,
-              cellId: team.cellId,
-              source: 'championSelect'
-            });
-          }
-        }
+        players.push({
+          summonerId: team.summonerId,
+          puuid: summoner.puuid,
+          summonerName: summonerName,
+          championId: team.championId,
+          cellId: team.cellId,
+          profileIconId: summoner.profileIconId || null,
+          skinId: team.selectedSkinId || team.skinId || null,
+          source: 'championSelect'
+        });
+      }
+    }
       }
 
       return players;
@@ -200,6 +202,8 @@ class LCUConnector {
           summonerName: summonerName,
           championId: player.championId,
           teamId: player.teamId,
+          profileIconId: summoner ? summoner.profileIconId || null : null,
+          skinId: player.skinId || null,
           source: 'inGame'
         });
       }

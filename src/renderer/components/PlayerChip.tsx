@@ -5,7 +5,7 @@ import { TagPill } from './TagPill'
 import { ModeStatsRow } from './ModeStatsRow'
 import { PlayerTagMenu } from './PlayerTagMenu'
 import { cn } from '@/lib/utils'
-import { User, ChevronDown, Tag } from 'lucide-react'
+import { User, ChevronDown, ChevronUp, Tag } from 'lucide-react'
 import type { SplitStats, GameMode, ModeStats } from '../types'
 
 interface PlayerTag {
@@ -37,13 +37,17 @@ interface PlayerChipProps {
   allyQuality?: 'good' | 'average' | 'poor'
   byMode?: Record<GameMode, ModeStats>
   profileIconId?: number | null
+  skinId?: number | null
+  championName?: string
+  championId?: number
+  isExpanded?: boolean
 }
 
 export function PlayerChip({
   puuid,
   summonerName,
   encounterCount,
-  tags = [],
+  tags: tagsProp,
   wins = 0,
   losses = 0,
   onClick,
@@ -56,13 +60,22 @@ export function PlayerChip({
   allyQuality,
   byMode,
   profileIconId,
+  skinId,
+  championName,
+  championId,
+  isExpanded = false,
 }: PlayerChipProps) {
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
-  const [playerTags, setPlayerTags] = useState<any[]>([])
+  const [playerTags, setPlayerTags] = useState<any[]>(tagsProp || [])
+  const [imageIndex, setImageIndex] = useState(0)
+  const isClickable = Boolean(onClick)
 
   // Load tags for this player
   const loadTags = async () => {
     try {
+      if (!window.api?.getPlayerTags) {
+        return
+      }
       const result = await window.api.getPlayerTags(puuid)
       if (result.success) {
         setPlayerTags(result.tags)
@@ -71,6 +84,21 @@ export function PlayerChip({
       console.error('Failed to load tags:', error)
     }
   }
+
+  // Keep local tag state in sync with provided props (useful for mock/dev data)
+  useEffect(() => {
+    if (!tagsProp) return
+    const isSame =
+      tagsProp.length === playerTags.length &&
+      tagsProp.every((t, idx) => {
+        const cur = playerTags[idx]
+        return cur?.label === t.label && cur?.variant === t.variant
+      })
+    if (!isSame) {
+      setPlayerTags(tagsProp)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tagsProp])
 
   const handleTagsUpdated = () => {
     loadTags()
@@ -88,6 +116,30 @@ export function PlayerChip({
   useEffect(() => {
     loadTags()
   }, [puuid])
+
+  // Reset image fallback when source set changes
+  useEffect(() => {
+    setImageIndex(0)
+  }, [skinId, profileIconId, championName, championId])
+
+  const skinNum = typeof skinId === 'number' ? skinId % 1000 : undefined
+  const champFromSkin = typeof skinId === 'number' ? Math.floor(skinId / 1000) : undefined
+  const tileSources: string[] = []
+  if (skinId !== null && skinId !== undefined) {
+    tileSources.push(`/tiles/${skinId}.png`)
+    if (champFromSkin !== undefined) {
+      tileSources.push(`/tiles/${champFromSkin}_${skinNum ?? 0}.png`)
+    }
+    if (championId !== undefined && championId !== null) {
+      tileSources.push(`/tiles/${championId}_${skinNum ?? 0}.png`)
+    }
+  }
+  const sources = [
+    ...tileSources,
+    profileIconId ? `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/${profileIconId}.png` : null,
+    championName ? `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/champion/${championName}.png` : null
+  ].filter(Boolean) as string[]
+  const currentSrc = sources[imageIndex]
 
   // Helper to format time ago
   const formatTimeAgo = (date: Date) => {
@@ -125,7 +177,8 @@ export function PlayerChip({
   return (
     <Card
       className={cn(
-        'transition-all hover:bg-muted/50 cursor-pointer',
+        'transition-all',
+        isClickable && 'cursor-pointer',
         className
       )}
       onClick={onClick}
@@ -133,29 +186,25 @@ export function PlayerChip({
       <CardContent className="p-3">
         <div className="space-y-2.5">
           {/* Header - Player Name & Total Games - Single Line */}
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              {/* Profile Icon */}
-              {profileIconId ? (
+              {/* Profile/Skin/Champion Icon */}
+              {currentSrc ? (
                 <img
-                  src={`https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/${profileIconId}.png`}
-                  alt={`${summonerName}'s profile icon`}
-                  className="h-8 w-8 rounded-full border-2 border-border flex-shrink-0"
-                  onError={(e) => {
-                    // Fallback to user icon if image fails to load
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                  }}
+                  src={currentSrc}
+                  alt={`${summonerName}'s avatar`}
+                  className="h-10 w-10 rounded-md border border-border flex-shrink-0 object-cover"
+                  onError={() => setImageIndex(i => i + 1)}
                 />
               ) : null}
-              <User className={cn("h-4 w-4 text-muted-foreground flex-shrink-0", profileIconId && "hidden")} />
+              <User className={cn("h-4 w-4 text-muted-foreground flex-shrink-0", currentSrc && "hidden")} />
               <span className="text-base font-semibold truncate">{summonerName}</span>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
               <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 flex items-center gap-1.5"
                 onClick={handleTagButtonClick}
                 title="Tag player"
               >
@@ -163,39 +212,46 @@ export function PlayerChip({
                   "h-3.5 w-3.5",
                   playerTags.length > 0 ? "text-primary" : "text-muted-foreground"
                 )} />
+                <span className="text-xs font-medium hidden sm:inline">Tag</span>
               </Button>
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 {encounterCount} {encounterCount === 1 ? 'game' : 'games'}
               </span>
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              {isClickable && (
+                isExpanded ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )
+              )}
             </div>
           </div>
 
           {/* Enhanced Stats Row - Horizontal, Larger Text */}
           {(asEnemy || asAlly) && (
-            <div className="flex gap-4 text-sm">
-              {/* Enemy Stats */}
-              {asEnemy && asEnemy.games > 0 && (
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="text-xs text-red-400/70 uppercase font-medium">vs Enemy:</span>
-                  <span className={cn("font-bold", getThreatColor(threatLevel))}>
-                    {asEnemy.wins}-{asEnemy.losses}
-                  </span>
-                  <span className={cn("text-xs", getThreatColor(threatLevel))}>
-                    ({asEnemy.winRate}%)
-                  </span>
-                </div>
-              )}
-
-              {/* Ally Stats */}
+            <div className="flex gap-4 text-sm flex-wrap">
+              {/* Ally Stats (shown first) */}
               {asAlly && asAlly.games > 0 && (
-                <div className="flex items-center gap-2 flex-1">
-                  <span className="text-xs text-emerald-400/70 uppercase font-medium">as Ally:</span>
+                <div className="flex items-center gap-2 flex-1 min-w-[170px]">
+                  <span className="text-xs text-emerald-400/70 uppercase font-medium">As Teammate:</span>
                   <span className={cn("font-bold", getAllyColor(allyQuality))}>
                     {asAlly.wins}-{asAlly.losses}
                   </span>
                   <span className={cn("text-xs", getAllyColor(allyQuality))}>
                     ({asAlly.winRate}%)
+                  </span>
+                </div>
+              )}
+
+              {/* Enemy Stats */}
+              {asEnemy && asEnemy.games > 0 && (
+                <div className="flex items-center gap-2 flex-1 min-w-[170px]">
+                  <span className="text-xs text-red-400/70 uppercase font-medium">As Opponent:</span>
+                  <span className={cn("font-bold", getThreatColor(threatLevel))}>
+                    {asEnemy.wins}-{asEnemy.losses}
+                  </span>
+                  <span className={cn("text-xs", getThreatColor(threatLevel))}>
+                    ({asEnemy.winRate}%)
                   </span>
                 </div>
               )}
@@ -211,21 +267,31 @@ export function PlayerChip({
             {playerTags.length > 0 && (
               <div className="flex gap-1.5 flex-wrap">
                 {playerTags.map((tag, idx) => (
-                  <TagPill
-                    key={idx}
-                    label={
-                      tag.tag_type === 'toxic' ? 'Toxic' :
-                      tag.tag_type === 'friendly' ? 'Friendly' :
-                      tag.tag_type === 'notable' ? 'Notable' :
-                      'Duo'
-                    }
-                    variant={
-                      tag.tag_type === 'toxic' ? 'toxic' :
-                      tag.tag_type === 'friendly' ? 'positive' :
-                      tag.tag_type === 'notable' ? 'notable' :
-                      'info'
-                    }
-                  />
+                  <div key={idx} className="relative group">
+                    <TagPill
+                      label={
+                        tag.tag_type === 'toxic' ? 'Toxic' :
+                        tag.tag_type === 'friendly' ? 'Friendly' :
+                        tag.tag_type === 'notable' ? 'Notable' :
+                        'Duo'
+                      }
+                      variant={
+                        tag.tag_type === 'toxic' ? 'toxic' :
+                        tag.tag_type === 'friendly' ? 'positive' :
+                        tag.tag_type === 'notable' ? 'notable' :
+                        'info'
+                      }
+                      className="cursor-default"
+                    />
+                    {tag.note && (
+                      <div
+                        className="pointer-events-none absolute left-0 top-full mt-1 inline-block rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-wrap break-words"
+                        style={{ width: 'max-content', maxWidth: '18rem' }}
+                      >
+                        {tag.note}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             )}

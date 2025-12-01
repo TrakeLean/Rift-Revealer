@@ -55,33 +55,74 @@ export function StatsPanel({ asEnemy, asAlly, className }: StatsPanelProps) {
     )
   }
 
-  // Helper to render top champions
-  const renderTopChampions = (stats?: SplitStats) => {
+  // Helper to render top champions with heading
+  const renderTopChampionsBlock = (title: string, stats?: SplitStats) => {
     if (!stats || stats.topChampions.length === 0) return null
 
     return (
-      <div className="space-y-1.5">
-        {stats.topChampions.slice(0, 3).map((champ, idx) => (
-          <div
-            key={idx}
-            className="flex items-center justify-between text-xs p-2 rounded bg-muted/30"
-          >
-            <span className="font-medium text-foreground/90">{champ.champion}</span>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">
-                {champ.games}g
-              </span>
-              <span className={cn(
-                "font-semibold",
-                champ.winRate >= 60 ? "text-emerald-400" :
-                champ.winRate >= 40 ? "text-yellow-400" :
-                "text-red-400"
-              )}>
-                {champ.winRate}%
-              </span>
+      <div>
+        <div className="text-[10px] text-muted-foreground uppercase mb-2">
+          {title}
+        </div>
+        <div className="space-y-1.5">
+          {stats.topChampions.slice(0, 3).map((champ, idx) => (
+            <div
+              key={idx}
+              className="flex items-center justify-between text-xs p-2 rounded bg-muted/30"
+            >
+              <span className="font-medium text-foreground/90">{champ.champion}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">
+                  {champ.games}g
+                </span>
+                <span className={cn(
+                  "font-semibold",
+                  champ.winRate >= 60 ? "text-emerald-400" :
+                  champ.winRate >= 40 ? "text-yellow-400" :
+                  "text-red-400"
+                )}>
+                  {champ.winRate}%
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Helper to render role stats
+  const renderRoleStats = (stats?: SplitStats) => {
+    if (!stats || !stats.roleStats || stats.roleStats.length === 0) return null
+
+    return (
+      <div>
+        <div className="text-[10px] text-muted-foreground uppercase mb-2">
+          Role Breakdown
+        </div>
+        <div className="space-y-1.5">
+          {stats.roleStats.slice(0, 4).map((role, idx) => (
+            <div
+              key={idx}
+              className="flex items-center justify-between text-xs p-2 rounded bg-muted/30"
+            >
+              <span className="font-medium text-foreground/90">{role.role}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">
+                  {role.games}g
+                </span>
+                <span className={cn(
+                  "font-semibold",
+                  role.winRate >= 60 ? "text-emerald-400" :
+                  role.winRate >= 40 ? "text-yellow-400" :
+                  "text-red-400"
+                )}>
+                  {role.winRate}%
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -89,65 +130,7 @@ export function StatsPanel({ asEnemy, asAlly, className }: StatsPanelProps) {
   return (
     <Card className={cn("border-l-4 border-l-muted", className)}>
       <CardContent className="p-4 space-y-4">
-        {/* Enemy Stats Section */}
-        {asEnemy && asEnemy.games > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Target className="h-4 w-4 text-red-400" />
-              <h4 className="text-sm font-semibold text-red-400 uppercase tracking-wide">
-                vs Enemy
-              </h4>
-              <div className="flex-1 h-px bg-red-900/30" />
-            </div>
-
-            {/* Record & Form */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Record:</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">
-                    {asEnemy.wins}W - {asEnemy.losses}L
-                  </span>
-                  <span className={cn(
-                    "text-xs font-semibold",
-                    asEnemy.winRate >= 60 ? "text-red-400" :
-                    asEnemy.winRate >= 40 ? "text-yellow-400" :
-                    "text-emerald-400"
-                  )}>
-                    ({asEnemy.winRate}% WR)
-                  </span>
-                </div>
-              </div>
-
-              {asEnemy.recentForm.length > 0 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Recent form:</span>
-                  {renderRecentForm(asEnemy.recentForm)}
-                </div>
-              )}
-            </div>
-
-            {/* Performance */}
-            {renderPerformance(asEnemy)}
-
-            {/* Top Champions */}
-            {asEnemy.topChampions.length > 0 && (
-              <div>
-                <div className="text-[10px] text-muted-foreground uppercase mb-2">
-                  Most Played vs You
-                </div>
-                {renderTopChampions(asEnemy)}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Divider between sections */}
-        {asEnemy && asEnemy.games > 0 && asAlly && asAlly.games > 0 && (
-          <div className="h-px bg-border" />
-        )}
-
-        {/* Ally Stats Section */}
+        {/* Ally Stats Section (shown first) */}
         {asAlly && asAlly.games > 0 && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
@@ -188,13 +171,67 @@ export function StatsPanel({ asEnemy, asAlly, className }: StatsPanelProps) {
             {/* Performance */}
             {renderPerformance(asAlly)}
 
-            {/* Top Champions */}
-            {asAlly.topChampions.length > 0 && (
-              <div>
-                <div className="text-[10px] text-muted-foreground uppercase mb-2">
-                  Most Played with You
+            {/* Top Champions + Roles side-by-side */}
+            {(asAlly.topChampions.length > 0 || (asAlly.roleStats && asAlly.roleStats.length > 0)) && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {renderTopChampionsBlock('Most Played with You', asAlly)}
+                {renderRoleStats(asAlly)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Divider between sections */}
+        {asEnemy && asEnemy.games > 0 && asAlly && asAlly.games > 0 && (
+          <div className="h-px bg-border" />
+        )}
+
+        {/* Enemy Stats Section */}
+        {asEnemy && asEnemy.games > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-red-400" />
+              <h4 className="text-sm font-semibold text-red-400 uppercase tracking-wide">
+                As Opponent
+              </h4>
+              <div className="flex-1 h-px bg-red-900/30" />
+            </div>
+
+            {/* Record & Form */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Record:</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">
+                    {asEnemy.wins}W - {asEnemy.losses}L
+                  </span>
+                  <span className={cn(
+                    "text-xs font-semibold",
+                    asEnemy.winRate >= 60 ? "text-red-400" :
+                    asEnemy.winRate >= 40 ? "text-yellow-400" :
+                    "text-emerald-400"
+                  )}>
+                    ({asEnemy.winRate}% WR)
+                  </span>
                 </div>
-                {renderTopChampions(asAlly)}
+              </div>
+
+              {asEnemy.recentForm.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Recent form:</span>
+                  {renderRecentForm(asEnemy.recentForm)}
+                </div>
+              )}
+            </div>
+
+            {/* Performance */}
+            {renderPerformance(asEnemy)}
+
+            {/* Top Champions + Roles side-by-side */}
+            {(asEnemy.topChampions.length > 0 || (asEnemy.roleStats && asEnemy.roleStats.length > 0)) && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {renderTopChampionsBlock('Most Played vs You', asEnemy)}
+                {renderRoleStats(asEnemy)}
               </div>
             )}
           </div>

@@ -41,8 +41,8 @@ Choose your preferred version:
 - Win/Loss records split by game mode (Ranked, Normal, ARAM, Arena)
 - Champion matchup history
 - Performance metrics (KDA, damage, CS)
-- Threat level indicators
-- **Profile icons** displayed next to player names
+ - Threat level indicators
+- **Profile icons and skins** displayed next to player names (skin tiles pulled live from the client with fallbacks)
 
 ### 🏷️ Player Tagging System
 - Tag players as **Toxic** (red), **Friendly** (green), **Notable** (yellow), or **Duo** (blue)
@@ -62,6 +62,7 @@ Choose your preferred version:
 - Color-coded threat indicators
 - Quick visual scanning for important info
 - Responsive design that adapts to your screen
+- Last-match roster view mirrors live cards with full encounter stats, mode badges, skins, and expandable recent games
 
 ### 🔄 Auto-Update System
 - Automatic update notifications
@@ -99,12 +100,12 @@ Choose your preferred version:
 2. **Import Match History**:
    - Click "Import Match History"
    - Wait for the import to complete (downloads your last 100 games)
-   - Repeat to import more games if desired
 
 3. **Start Playing**:
    - The app automatically monitors your League client
    - Enter a lobby or game
    - See instant analysis of detected players!
+   - When idle (not in champ select/in-game), see your last match roster with skins, tags, and expandable stats
 
 ---
 
