@@ -61,7 +61,7 @@
       "Bash(gh run view:*)",
       "Bash(git log:*)",
       "Bash(cat:*)",
-      "Bash(\"dist\\RiftRevealer 1.4.9.exe\")"
+      "Bash(\"dist\\RiftRevealer 1.5.0.exe\")"
     ],
     "deny": [],
     "ask": []
