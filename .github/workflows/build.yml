@@ -2,16 +2,35 @@ name: Build and Release
 
 on:
   push:
-    tags:
-      - 'v*'
-    branches:
-      - main
+    branches: [main]
+    tags: ['v*']
   pull_request:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  build:
+  verify:
+    # Lightweight check for PRs and main pushes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer
+        run: npm run build
+
+  package-windows:
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
 
     steps:
@@ -27,20 +46,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
+      - name: Package Windows app
         run: npm run package
 
-      - name: Upload artifacts
+      - name: Upload artifacts (Windows installer, portable, updater metadata)
         uses: actions/upload-artifact@v4
         with:
-          name: windows-executables
+          name: windows-build
           path: |
             dist/*.exe
             dist/*.exe.blockmap
-          retention-days: 5
+            dist/latest.yml
+            dist/*.yml
+          retention-days: 7
 
   release:
-    needs: build
+    needs: package-windows
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -53,7 +74,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: windows-executables
+          name: windows-build
           path: dist
 
       - name: Extract version from tag
@@ -85,6 +106,9 @@ jobs:
           body_path: changelog_section.txt
           files: |
             dist/*.exe
+            dist/*.exe.blockmap
+            dist/latest.yml
+            dist/*.yml
           draft: false
           prerelease: false
         env:

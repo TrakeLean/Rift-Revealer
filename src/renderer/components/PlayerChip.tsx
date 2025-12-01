@@ -263,7 +263,7 @@ export function PlayerChip({
   return (
     <Card
       className={cn(
-        'transition-all relative overflow-hidden',
+        'transition-all relative overflow-visible',
         isClickable && 'cursor-pointer',
         className
       )}
@@ -380,7 +380,7 @@ export function PlayerChip({
                     />
                     {tag.note && (
                       <div
-                        className="pointer-events-none absolute left-0 top-full mt-1 inline-block rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-wrap break-words"
+                        className="pointer-events-none absolute left-0 top-full mt-1 inline-block rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-wrap break-words z-50"
                         style={{ width: 'max-content', maxWidth: '18rem' }}
                       >
                         {tag.note}
