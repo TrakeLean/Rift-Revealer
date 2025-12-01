@@ -18,7 +18,7 @@ let updateChecker = null;
 autoUpdater.autoDownload = false; // We'll download manually after user confirmation
 autoUpdater.autoInstallOnAppQuit = true;
 
-// Gameflow state machine variables
+  // Gameflow state machine variables
 let currentGameflowState = null;
 let lastAnalyzedPlayers = null;
 let gameImported = false; // Track if we've imported the current game
@@ -44,7 +44,8 @@ const QUEUE_NAMES = {
   1300: 'Nexus Blitz',
   1400: 'Ultimate Spellbook',
   1700: 'Arena',
-  1900: 'Pick URF'
+  1900: 'Pick URF',
+  3140: 'Practice Tool'
 };
 
 // Helper to get queue name
@@ -350,6 +351,22 @@ ipcMain.handle('get-user-config', async () => {
   return db.getUserConfig();
 });
 
+ipcMain.handle('get-last-match-roster', async () => {
+  try {
+    const roster = db.getMostRecentMatchRoster();
+    if (!roster) {
+      return {
+        success: false,
+        error: 'No recent matches found. Import matches from Settings to see your last game roster.'
+      };
+    }
+    return { success: true, data: roster };
+  } catch (error) {
+    console.error('Failed to get last match roster:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('diagnose-database', async () => {
   try {
     const config = db.getUserConfig();
@@ -435,7 +452,15 @@ ipcMain.handle('import-match-history', async (event, count = 100) => {
       event.sender.send('import-progress', progress);
     };
 
-    const result = await riotApi.importMatchHistory(config.puuid, config.region, count, progressCallback);
+    let cancelled = false;
+    const isCancelled = () => cancelled;
+
+    // Listen for cancellation from renderer
+    ipcMain.once('cancel-import-match-history', () => {
+      cancelled = true;
+    });
+
+    const result = await riotApi.importMatchHistory(config.puuid, config.region, count, progressCallback, isCancelled);
     return { success: true, imported: result };
   } catch (error) {
     return { success: false, error: error.message };
@@ -569,9 +594,21 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
     // Case-insensitive comparison to avoid missing your own name due to capitalization
     if (player.summonerName.toLowerCase() !== config.summoner_name.toLowerCase()) {
       console.log(`Checking history for: ${player.summonerName}`);
-      // Note: Match API and LCU return different PUUID formats, so we must use name matching
-      const history = db.getPlayerHistory(player.summonerName, null);
+      // Prefer PUUID (more reliable) and fall back to name matching
+      const history = db.getPlayerHistory(player.summonerName, player.puuid || null);
       console.log(`  Found ${history.games.length} games`);
+      // Persist latest cosmetics
+      try {
+        db.savePlayer(
+          player.puuid,
+          player.summonerName,
+          config.region,
+          player.profileIconId || null,
+          player.skinId || null
+        );
+      } catch (err) {
+        console.log('Warning: failed to save player cosmetic info:', err.message);
+      }
       if (history.games.length > 0 && history.stats) {
         // Transform games to include isAlly flag
         const transformedGames = history.games.map(g => ({
@@ -604,7 +641,10 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
           threatLevel: history.stats.enhanced.threatLevel,
           allyQuality: history.stats.enhanced.allyQuality,
           byMode: history.stats.enhanced.byMode,  // Add mode-specific stats
-          profileIconId: history.stats.enhanced.profileIconId  // Add profile icon
+          profileIconId: player.profileIconId || history.stats.enhanced.profileIconId,  // Prefer live icon
+          skinId: player.skinId || null,
+          championId: player.championId || null,
+          championName: player.championName || null
         });
       }
     }
@@ -646,14 +686,33 @@ async function startGameflowMonitor() {
   // Gameflow state machine - polls every 3 seconds
   autoMonitorInterval = setInterval(async () => {
     try {
-      // Only connect if not already connected
-      if (!lcuConnector.credentials) {
-        await lcuConnector.connect();
+      // Refresh credentials each loop; detect client closure via missing lockfile
+      const creds = lcuConnector.findLeagueClientCredentials();
+      if (!creds) {
+        // Client closed/missing
+        if (currentGameflowState !== 'ClientClosed') {
+          currentGameflowState = 'ClientClosed';
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gameflow-status', {
+              state: 'ClientClosed',
+              message: 'League client not detected. Open it to start monitoring.',
+              canAnalyze: false
+            });
+          }
+        }
+        return; // Skip the rest of the loop
       }
+      lcuConnector.credentials = creds;
 
       // Get current gameflow state
       const gameflowSession = await lcuConnector.getGameflowSession();
-      const newState = gameflowSession?.phase || 'None';
+      const rawState = gameflowSession?.phase || 'None';
+      const normalizedState = rawState.toLowerCase();
+
+      // Map additional phases to meaningful states
+      let newState = rawState;
+      if (normalizedState === 'gamestart') newState = 'InProgress';
+      if (normalizedState === 'waitingforstats' || normalizedState === 'preendofgame') newState = 'EndOfGame';
 
       // Log state transitions
       if (newState !== currentGameflowState) {
@@ -679,9 +738,18 @@ async function startGameflowMonitor() {
           lastAnalyzedPlayers = null;
           gameImported = false; // Reset import flag when entering new lobby
           if (mainWindow && !mainWindow.isDestroyed()) {
+            const queueId = gameflowSession?.queue?.id || gameflowSession?.gameData?.queue?.id || 0;
+            const queueName = getQueueName(queueId);
             mainWindow.webContents.send('gameflow-status', {
               state: currentGameflowState,
-              message: 'Waiting for champion select...',
+              message:
+                currentGameflowState === 'Lobby'
+                  ? `${queueName || 'Queue'} open - waiting for champion select.`
+                : currentGameflowState === 'Matchmaking'
+                  ? `Searching for a match (${queueName || 'searching'}).`
+                : currentGameflowState === 'ReadyCheck'
+                  ? 'Ready check - accept to enter champion select.'
+                  : 'League client detected - waiting for lobby.',
               canAnalyze: false
             });
           }
@@ -690,7 +758,7 @@ async function startGameflowMonitor() {
         case 'ChampSelect': {
           // In champion select - check if queue is anonymized
           const champSelect = await lcuConnector.getChampSelect();
-          const queueId = champSelect?.queue?.id || 0;
+          const queueId = champSelect?.queue?.id || gameflowSession?.queue?.id || gameflowSession?.gameData?.queue?.id || 0;
           const queueName = getQueueName(queueId);
           const isAnonymized = ANONYMIZED_QUEUES.includes(queueId);
 
@@ -742,9 +810,11 @@ async function startGameflowMonitor() {
           }
 
           if (mainWindow && !mainWindow.isDestroyed()) {
+            const queueId = gameflowSession?.queue?.id || gameflowSession?.gameData?.queue?.id || 0;
+            const queueName = getQueueName(queueId);
             mainWindow.webContents.send('gameflow-status', {
               state: 'InProgress',
-              message: 'In game - analysis complete',
+              message: `${queueName || 'Active'} in progress - analysis complete.`,
               canAnalyze: false
             });
           }
@@ -845,7 +915,17 @@ async function startGameflowMonitor() {
     } catch (error) {
       // Reset credentials on connection error so we retry connecting next time
       lcuConnector.credentials = null;
-      // Silently ignore errors during auto-monitoring (e.g., when client is closed)
+      // Notify renderer when the client is closed/missing (avoid spamming)
+      if (currentGameflowState !== 'ClientClosed') {
+        currentGameflowState = 'ClientClosed';
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('gameflow-status', {
+            state: 'ClientClosed',
+            message: 'League client not detected. Open the League client to start monitoring.',
+            canAnalyze: false
+          });
+        }
+      }
     }
   }, 3000); // Check every 3 seconds
 

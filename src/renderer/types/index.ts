@@ -38,6 +38,45 @@ export interface LobbyPlayer {
   source: 'championSelect' | 'inGame'
 }
 
+export interface RosterPlayer {
+  puuid: string
+  summonerName: string
+  championName?: string
+  championId?: number
+  teamId?: number
+  role?: string
+  lane?: string
+  teamPosition?: string
+  profileIconId?: number | null
+  win?: boolean
+  encounterCount?: number
+  wins?: number
+  losses?: number
+  winRate?: number
+  skinId?: number | null
+  asEnemy?: SplitStats | null
+  asAlly?: SplitStats | null
+  lastSeen?: {
+    timestamp: Date
+    champion: string
+    role?: string
+    outcome: 'win' | 'loss'
+    isAlly: boolean
+  } | null
+  threatLevel?: 'high' | 'medium' | 'low' | null
+  allyQuality?: 'good' | 'average' | 'poor' | null
+  byMode?: Record<GameMode, ModeStats> | null
+  games?: MatchData[]
+}
+
+export interface LastMatchRoster {
+  matchId: string
+  queueId?: number
+  gameCreation?: number
+  userTeamId?: number | null
+  players: RosterPlayer[]
+}
+
 // Player Tag
 export interface PlayerTag {
   label: string
@@ -71,6 +110,15 @@ export interface SplitStats {
   recentForm: ('W' | 'L')[] // Last 5 games
   topChampions: ChampionStats[]
   performance: PerformanceStats
+  roleStats: RoleStats[]
+}
+
+export interface RoleStats {
+  role: string
+  games: number
+  wins: number
+  losses: number
+  winRate: number
 }
 
 // Mode-specific stats (Ranked, Normal, ARAM, etc.)
@@ -107,6 +155,9 @@ export interface AnalysisResult {
   allyQuality?: 'good' | 'average' | 'poor' // Based on ally WR
   byMode?: Record<GameMode, ModeStats> // Stats grouped by game mode
   profileIconId?: number | null // Profile icon from Riot
+  skinId?: number | null // Preferred skin ID (from LCU)
+   championId?: number | null
+   championName?: string | null
 }
 
 // IPC Response Types
@@ -134,6 +185,7 @@ export interface WindowAPI {
     apiKey: string
   ) => Promise<IPCResponse>
   importMatchHistory: () => Promise<IPCResponse<{ imported: number }>>
+  cancelImportMatchHistory: () => void
   connectLCU: () => Promise<IPCResponse>
   getLobbyPlayers: () => Promise<LobbyPlayer[]>
   getPlayerHistory: (summonerName: string) => Promise<PlayerHistory>
@@ -159,6 +211,7 @@ export interface WindowAPI {
   removeAllPlayerTags: (puuid: string) => Promise<IPCResponse>
   getPlayerTags: (puuid: string) => Promise<IPCResponse<any[]>>
   getAllTaggedPlayers: () => Promise<IPCResponse<any[]>>
+  getLastMatchRoster: () => Promise<IPCResponse<LastMatchRoster>>
 }
 
 declare global {

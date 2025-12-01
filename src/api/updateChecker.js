@@ -4,7 +4,7 @@ const { app } = require('electron');
 class UpdateChecker {
   constructor() {
     this.currentVersion = app.getVersion();
-    this.githubRepo = 'TrakeLean/Rift-Revealer'; // Update with your GitHub username/repo
+    this.githubRepo = 'TrakeLean/Rift-Revealer';
   }
 
   /**

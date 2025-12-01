@@ -105,12 +105,15 @@ class RiotAPI {
     }
   }
 
-  async importMatchHistory(puuid, region, count = 20, progressCallback = null) {
+  async importMatchHistory(puuid, region, count = 20, progressCallback = null, isCancelled = () => false) {
     try {
       const matchIds = await this.getMatchIdsByPuuid(puuid, region, count);
       let imported = 0;
 
       for (let i = 0; i < matchIds.length; i++) {
+        if (isCancelled()) {
+          break;
+        }
         const matchId = matchIds[i];
         try {
           const matchData = await this.getMatchDetails(matchId, region);

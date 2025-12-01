@@ -60,7 +60,8 @@
       "Bash(npx png-to-ico:*)",
       "Bash(gh run view:*)",
       "Bash(git log:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(\"dist\\RiftRevealer 1.4.9.exe\")"
     ],
     "deny": [],
     "ask": []

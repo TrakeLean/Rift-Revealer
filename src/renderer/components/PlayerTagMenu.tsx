@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -72,16 +72,27 @@ export function PlayerTagMenu({
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
-  // Initialize state from existing tags
+  // Initialize state from existing tags when dialog opens or player changes.
+  const lastInitKey = useRef<string | null>(null)
+
   useEffect(() => {
-    const tagSet = new Set(existingTags.map(t => t.tag_type))
-    const noteMap: Record<string, string> = {}
+    if (!open) return;
+
+    const initKey = `${puuid}|${JSON.stringify(existingTags)}`;
+    if (lastInitKey.current === initKey) {
+      return; // already initialized for this player/tag set
+    }
+
+    const tagSet = new Set(existingTags.map(t => t.tag_type));
+    const noteMap: Record<string, string> = {};
     existingTags.forEach(t => {
-      if (t.note) noteMap[t.tag_type] = t.note
-    })
-    setSelectedTags(tagSet)
-    setNotes(noteMap)
-  }, [existingTags])
+      if (t.note) noteMap[t.tag_type] = t.note;
+    });
+
+    setSelectedTags(tagSet);
+    setNotes(noteMap);
+    lastInitKey.current = initKey;
+  }, [open, puuid, existingTags]);
 
   const toggleTag = (tagType: string) => {
     const newTags = new Set(selectedTags)

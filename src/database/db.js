@@ -41,16 +41,19 @@ class DatabaseManager {
     // Check if profile_icon_id column exists in players table
     const playersInfo = this.db.prepare("PRAGMA table_info(players)").all();
     const hasProfileIconInPlayers = playersInfo.some(col => col.name === 'profile_icon_id');
+    const hasSkinInPlayers = playersInfo.some(col => col.name === 'skin_id');
+
+    const participantsInfo = this.db.prepare("PRAGMA table_info(match_participants)").all();
+    const hasProfileIconInParticipants = participantsInfo.some(col => col.name === 'profile_icon_id');
 
     if (!hasProfileIconInPlayers) {
       console.log('Running migration: Adding profile_icon_id to players table');
       this.db.exec('ALTER TABLE players ADD COLUMN profile_icon_id INTEGER');
     }
-
-    // Check if profile_icon_id column exists in match_participants table
-    const participantsInfo = this.db.prepare("PRAGMA table_info(match_participants)").all();
-    const hasProfileIconInParticipants = participantsInfo.some(col => col.name === 'profile_icon_id');
-
+    if (!hasSkinInPlayers) {
+      console.log('Running migration: Adding skin_id to players table');
+      this.db.exec('ALTER TABLE players ADD COLUMN skin_id INTEGER');
+    }
     if (!hasProfileIconInParticipants) {
       console.log('Running migration: Adding profile_icon_id to match_participants table');
       this.db.exec('ALTER TABLE match_participants ADD COLUMN profile_icon_id INTEGER');
@@ -78,12 +81,12 @@ class DatabaseManager {
     );
   }
 
-  savePlayer(puuid, summonerName, region, profileIconId = null) {
+  savePlayer(puuid, summonerName, region, profileIconId = null, skinId = null) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO players (puuid, summoner_name, region, last_seen, profile_icon_id)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO players (puuid, summoner_name, region, last_seen, profile_icon_id, skin_id)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-    return stmt.run(puuid, summonerName, region, Date.now(), profileIconId);
+    return stmt.run(puuid, summonerName, region, Date.now(), profileIconId, skinId);
   }
 
   saveMatch(matchData) {
@@ -149,6 +152,7 @@ class DatabaseManager {
       }
 
       this.savePlayer(participant.puuid, summonerName, matchData.info.platformId, participant.profileIconId);
+      // Skin not available from match API; leave null
 
       participantStmt.run(
         matchData.metadata.matchId,
@@ -205,6 +209,9 @@ class DatabaseManager {
           m.game_duration,
           m.queue_id,
           opponent.summoner_name as opponent_name,
+          opponent.team_position as opponent_team_position,
+          opponent.lane as opponent_lane,
+          opponent.role as opponent_role,
           opponent.champion_name as opponent_champion,
           opponent.kills as opponent_kills,
           opponent.deaths as opponent_deaths,
@@ -256,6 +263,9 @@ class DatabaseManager {
           m.game_duration,
           m.queue_id,
           opponent.summoner_name as opponent_name,
+          opponent.team_position as opponent_team_position,
+          opponent.lane as opponent_lane,
+          opponent.role as opponent_role,
           opponent.champion_name as opponent_champion,
           opponent.kills as opponent_kills,
           opponent.deaths as opponent_deaths,
@@ -355,6 +365,54 @@ class DatabaseManager {
         .slice(0, 3); // Top 3 champions
     };
 
+    // Helper: Get role stats (Jungle/Support/etc)
+    const getRoleStats = (gamesList) => {
+      const roleMap = {};
+
+      gamesList.forEach(g => {
+        const rawRole = (
+          g.opponent_team_position ||
+          g.opponent_lane ||
+          g.opponent_role ||
+          ''
+        ).toUpperCase();
+        // Normalize Riot role strings into friendlier labels
+        const role = {
+          JUNGLE: 'Jungle',
+          JG: 'Jungle',
+          TOP: 'Top',
+          MIDDLE: 'Mid',
+          MID: 'Mid',
+          BOTTOM: 'ADC',
+          ADC: 'ADC',
+          DUO_CARRY: 'ADC',
+          UTILITY: 'Support',
+          SUPPORT: 'Support',
+        }[rawRole] || 'Unknown';
+
+        if (!roleMap[role]) {
+          roleMap[role] = { wins: 0, losses: 0, games: 0 };
+        }
+
+        roleMap[role].games += 1;
+        if (g.user_win === 1) {
+          roleMap[role].wins += 1;
+        } else {
+          roleMap[role].losses += 1;
+        }
+      });
+
+      return Object.entries(roleMap)
+        .map(([role, stats]) => ({
+          role,
+          games: stats.games,
+          wins: stats.wins,
+          losses: stats.losses,
+          winRate: Math.round((stats.wins / stats.games) * 100)
+        }))
+        .sort((a, b) => b.games - a.games);
+    };
+
     // Helper: Get recent form (last 5 games)
     const getRecentForm = (gamesList) => {
       return gamesList
@@ -379,7 +437,8 @@ class DatabaseManager {
         lastPlayed: new Date(relevantGames[0].game_creation),
         recentForm: getRecentForm(relevantGames),
         topChampions: getTopChampions(relevantGames),
-        performance: calculatePerformance(relevantGames)
+        performance: calculatePerformance(relevantGames),
+        roleStats: getRoleStats(relevantGames)
       };
     };
 
@@ -393,7 +452,8 @@ class DatabaseManager {
       lastPlayed: enemyGames.length > 0 ? new Date(enemyGames[0].game_creation) : null,
       recentForm: getRecentForm(enemyGames),
       topChampions: getTopChampions(enemyGames),
-      performance: calculatePerformance(enemyGames)
+      performance: calculatePerformance(enemyGames),
+      roleStats: getRoleStats(enemyGames)
     };
 
     // Calculate ally stats
@@ -406,7 +466,8 @@ class DatabaseManager {
       lastPlayed: teammateGames.length > 0 ? new Date(teammateGames[0].game_creation) : null,
       recentForm: getRecentForm(teammateGames),
       topChampions: getTopChampions(teammateGames),
-      performance: calculatePerformance(teammateGames)
+      performance: calculatePerformance(teammateGames),
+      roleStats: getRoleStats(teammateGames)
     };
 
     // Calculate threat level based on enemy win rate
@@ -474,6 +535,151 @@ class DatabaseManager {
           profileIconId  // Add profile icon
         }
       }
+    };
+  }
+
+  /**
+   * Get the most recent match roster that includes the configured user.
+   * Returns players with team info so the renderer can show a scoreboard-style view.
+   */
+  getMostRecentMatchRoster() {
+    const config = this.getUserConfig();
+    if (!config?.puuid) {
+      return null;
+    }
+
+    // Find the latest match the user participated in
+    const matchStmt = this.db.prepare(`
+      SELECT m.match_id, m.queue_id, m.game_creation
+      FROM matches m
+      INNER JOIN match_participants mp ON m.match_id = mp.match_id AND mp.puuid = ?
+      ORDER BY m.game_creation DESC
+      LIMIT 1
+    `);
+
+    const match = matchStmt.get(config.puuid);
+    if (!match) {
+      return null;
+    }
+
+    const rosterStmt = this.db.prepare(`
+      SELECT
+        mp.puuid,
+        mp.summoner_name,
+        mp.champion_name,
+        mp.champion_id,
+        mp.team_id,
+        mp.role,
+        mp.lane,
+        mp.team_position,
+        mp.profile_icon_id,
+        mp.win,
+        p.skin_id as skin_id
+      FROM match_participants mp
+      LEFT JOIN players p ON p.puuid = mp.puuid
+      WHERE mp.match_id = ?
+      ORDER BY mp.team_id ASC
+    `);
+
+    const playersRaw = rosterStmt.all(match.match_id);
+    const seen = new Map();
+    const playersBase = [];
+
+    for (const p of playersRaw) {
+      const key = `${p.puuid}-${p.team_id}`;
+      if (seen.has(key)) {
+        continue; // dedupe duplicate participant rows for the same match
+      }
+      seen.set(key, true);
+      playersBase.push({
+        puuid: p.puuid,
+        summonerName: p.summoner_name,
+        championName: p.champion_name,
+        championId: p.champion_id,
+        championName: p.champion_name,
+        teamId: p.team_id,
+        role: p.role,
+        lane: p.lane,
+        teamPosition: p.team_position,
+        profileIconId: p.profile_icon_id,
+        win: p.win === 1,
+        skinId: p.skin_id || null
+      });
+    }
+
+    // Enrich with encounter stats
+    const players = playersBase.map((p) => {
+      let encounterCount = 0;
+      let wins = 0;
+      let losses = 0;
+      let winRate = 0;
+      let asEnemy = null;
+      let asAlly = null;
+      let lastSeen = null;
+      let threatLevel = null;
+      let allyQuality = null;
+      let byMode = null;
+      let gamesTransformed = [];
+
+      try {
+        const history = this.getPlayerHistory(p.summonerName, p.puuid);
+        if (history && history.stats) {
+          encounterCount = history.stats.totalGames || 0;
+          const enemyWins = Number(history.stats.asEnemy?.wins || 0);
+          const allyWins = Number(history.stats.asTeammate?.wins || 0);
+          wins = enemyWins + allyWins;
+          losses = Math.max(encounterCount - wins, 0);
+          winRate = encounterCount > 0 ? Math.round((wins / encounterCount) * 100) : 0;
+
+          asEnemy = history.stats.enhanced.asEnemy;
+          asAlly = history.stats.enhanced.asAlly;
+          lastSeen = history.stats.enhanced.lastSeen;
+          threatLevel = history.stats.enhanced.threatLevel;
+          allyQuality = history.stats.enhanced.allyQuality;
+          byMode = history.stats.enhanced.byMode;
+
+          gamesTransformed = history.games.map(g => ({
+            gameId: g.match_id,
+            champion: g.opponent_champion,
+            role: g.team_position,
+            outcome: g.user_win === 1 ? 'win' : 'loss',
+            kda: {
+              kills: g.opponent_kills,
+              deaths: g.opponent_deaths,
+              assists: g.opponent_assists
+            },
+            timestamp: new Date(g.game_creation),
+            isAlly: g.user_team === g.opponent_team
+          }));
+        }
+      } catch (err) {
+        // Swallow errors; leave defaults
+      }
+
+      return {
+        ...p,
+        encounterCount,
+        wins,
+        losses,
+        winRate,
+        asEnemy,
+        asAlly,
+        lastSeen,
+        threatLevel,
+        allyQuality,
+        byMode,
+        games: gamesTransformed
+      };
+    });
+
+    const userTeamId = players.find(p => p.puuid === config.puuid)?.teamId || null;
+
+    return {
+      matchId: match.match_id,
+      queueId: match.queue_id,
+      gameCreation: match.game_creation,
+      userTeamId,
+      players
     };
   }
 

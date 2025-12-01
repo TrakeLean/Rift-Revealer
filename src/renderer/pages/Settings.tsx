@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Save, AlertCircle, CheckCircle2, Download, RefreshCw } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle2, Download, RefreshCw, Loader2 } from 'lucide-react'
 import type { UserConfig } from '../types'
 
 interface SettingsProps {
@@ -23,10 +23,24 @@ export function Settings({ onConfigSaved }: SettingsProps) {
   const [autoStart, setAutoStart] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<string | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importStatus, setImportStatus] = useState<string | null>(null)
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number; imported: number } | null>(null)
+  const [importCancelled, setImportCancelled] = useState(false)
 
   useEffect(() => {
     loadConfig()
     loadAutoStart()
+
+    const cleanupProgress = window.api.onImportProgress((progressData) => {
+      if (!importCancelled) {
+        setImportProgress(progressData)
+      }
+    })
+
+    return () => {
+      cleanupProgress()
+    }
   }, [])
 
   const loadConfig = async () => {
@@ -104,6 +118,38 @@ export function Settings({ onConfigSaved }: SettingsProps) {
     } finally {
       setIsCheckingUpdate(false)
     }
+  }
+
+  const handleImportHistory = async () => {
+    setIsImporting(true)
+    setImportCancelled(false)
+    setImportStatus('Fetching match IDs from Riot API...')
+    setImportProgress({ current: 0, total: 100, imported: 0 })
+    try {
+      const result = await window.api.importMatchHistory()
+      if (result.success) {
+        const imported = result.data?.imported ?? result.imported ?? 0
+        setImportStatus(`Successfully imported ${imported} match${imported === 1 ? '' : 'es'}!`)
+        setImportProgress(null)
+      } else {
+        setImportStatus(result.error || 'Import failed')
+        setImportProgress(null)
+      }
+    } catch (error) {
+      console.error('Error importing match history:', error)
+      setImportStatus('Error importing match history')
+      setImportProgress(null)
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  const handleCancelImport = () => {
+    setImportCancelled(true)
+    setIsImporting(false)
+    setImportStatus('Import canceled (in-flight requests may still finish).')
+    setImportProgress(null)
+    window.api.cancelImportMatchHistory()
   }
 
   const handleSave = async () => {
@@ -334,6 +380,89 @@ export function Settings({ onConfigSaved }: SettingsProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Data Management Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Data Management</CardTitle>
+          <CardDescription>Manually import your last 100 matches (Riot API limit) to improve detection.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            variant="outline"
+            onClick={handleImportHistory}
+            disabled={isImporting}
+            className="gap-2"
+          >
+            {isImporting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Importing...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4" />
+                Import Last 100 Matches
+              </>
+            )}
+          </Button>
+          {isImporting && (
+            <Button
+              variant="ghost"
+              onClick={handleCancelImport}
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Cancel Import
+            </Button>
+          )}
+
+          {importProgress && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Importing matches...</span>
+                <span className="text-foreground font-medium">
+                  {importProgress.current} / {importProgress.total}
+                </span>
+              </div>
+              <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-200 ease-out"
+                  style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                {importProgress.imported} matches saved successfully
+              </p>
+            </div>
+          )}
+
+          {importStatus && (
+            <div className="text-sm text-muted-foreground">
+              {importStatus}
+            </div>
+          )}
+
+          <Card className="bg-muted/50 border-border">
+            <CardContent className="p-4">
+              <h4 className="text-sm font-semibold mb-2">How it works:</h4>
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <li>• Fetches your recent matches from Riot API (up to 100).</li>
+                <li>• Stores encountered players to improve lobby detection.</li>
+                <li>• Run periodically to keep your encounter history fresh.</li>
+              </ul>
+            </CardContent>
+          </Card>
+
+          <div className="flex items-start gap-2 p-3 rounded-md bg-blue-950/30 text-blue-400 border border-blue-900/50">
+            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <div className="text-xs">
+              <strong>Import Time:</strong> Importing 100 matches can take ~10-15 seconds due to rate limiting. Progress updates in real time.
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
     </div>
   )
 }

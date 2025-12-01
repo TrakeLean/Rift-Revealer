@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react'
 import { Settings as SettingsPage } from './pages/Settings'
-import { MatchHistory } from './pages/MatchHistory'
 import { LobbyAnalysis } from './pages/LobbyAnalysis'
 import { Button } from './components/ui/button'
-import { Home, Settings, History, Minus, Square, X } from 'lucide-react'
+import { Home, Minus, Square, X, Wrench, Cog, Settings as SettingsIcon } from 'lucide-react'
 import { cn } from './lib/utils'
 import ErrorBoundary from './components/ErrorBoundary'
 import { UpdateNotification } from './components/UpdateNotification'
+import { DevPlayground } from './pages/DevPlayground'
 
-type Page = 'lobby' | 'history' | 'settings'
+type Page = 'lobby' | 'settings' | 'dev'
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('lobby')
   const [appVersion, setAppVersion] = useState<string>('...')
+  const isDev = import.meta.env.DEV || import.meta.env.MODE === 'development'
 
   useEffect(() => {
     window.api.getAppVersion().then(setAppVersion)
@@ -20,8 +21,8 @@ function App() {
 
   const navigationItems = [
     { id: 'lobby' as Page, label: 'Lobby Analysis', icon: Home },
-    { id: 'history' as Page, label: 'Match History', icon: History },
-    { id: 'settings' as Page, label: 'Settings', icon: Settings },
+    { id: 'settings' as Page, label: 'Settings', icon: SettingsIcon },
+    ...(isDev ? [{ id: 'dev' as Page, label: 'Dev', icon: Wrench }] : []),
   ]
 
   const handleMinimize = () => {
@@ -37,66 +38,51 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex flex-col">
       {/* Update Notification Dialog */}
       <UpdateNotification />
-
-      {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-border bg-card flex flex-col">
-        <div className="p-6" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-          <h1 className="text-2xl font-bold">Rift Revealer</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            League of Legends Encounter Tracker
-          </p>
-        </div>
-
-        <nav className="px-3 space-y-1 flex-1">
-          {navigationItems.map((item) => {
-            const Icon = item.icon
-            const isActive = currentPage === item.id
-
-            return (
-              <Button
-                key={item.id}
-                variant={isActive ? 'secondary' : 'ghost'}
-                className={cn(
-                  'w-full justify-start gap-3',
-                  isActive && 'bg-secondary'
-                )}
-                onClick={() => setCurrentPage(item.id)}
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </Button>
-            )
-          })}
-        </nav>
-
-        {/* Footer with Logo */}
-        <div className="border-t border-border p-4 space-y-3">
-          <div className="flex justify-center">
-            <img
-              src="./logo.png"
-              alt="Rift Revealer Logo"
-              className="h-16 w-16 opacity-70 hover:opacity-100 transition-opacity"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground text-center">
-            v{appVersion} - Made by TrakeLean
-          </p>
-        </div>
-      </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col">
         {/* Draggable top bar with window controls */}
         <div className="flex items-center justify-between px-6 pt-3 pb-2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-          <h2 className="text-2xl font-bold">
-            {navigationItems.find((item) => item.id === currentPage)?.label}
-          </h2>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <img
+                src="./logo.png"
+                alt="Rift Revealer Logo"
+                className="h-10 w-10 opacity-80"
+                style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                title={`Version ${appVersion}`}
+              />
+              <div>
+                <h2 className="text-2xl font-bold">
+                  {navigationItems.find((item) => item.id === currentPage)?.label}
+                </h2>
+                <p className="text-xs text-muted-foreground">Rift Revealer</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+              {navigationItems.map((item) => {
+                const Icon = item.icon
+                const isActive = currentPage === item.id
+                return (
+                  <Button
+                    key={item.id}
+                    variant={isActive ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => setCurrentPage(item.id)}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
 
           {/* Window controls - non-draggable */}
-          <div className="flex items-center" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             <button
               onClick={handleMinimize}
               className="h-8 w-10 flex items-center justify-center hover:bg-zinc-800 transition-colors rounded"
@@ -126,8 +112,8 @@ function App() {
           {/* Page Content */}
           <ErrorBoundary key={currentPage}>
             {currentPage === 'lobby' && <LobbyAnalysis />}
-            {currentPage === 'history' && <MatchHistory />}
             {currentPage === 'settings' && <SettingsPage />}
+            {isDev && currentPage === 'dev' && <DevPlayground />}
           </ErrorBoundary>
         </div>
       </main>
