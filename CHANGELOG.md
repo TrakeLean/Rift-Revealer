@@ -5,6 +5,18 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.9] - 2025-12-01
+
+### Added
+- Settings page now includes an Import Last 100 Matches action with progress details and a cancel flow that reaches down to the Riot API import loop.
+- Role breakdowns were added to stats and the mock data now mirrors them for Dev Playground previews.
+
+### Changed
+- Lobby status UI rebuilt with a floating bubble that auto-expands on new gameflow events, collapses after 5 seconds, and uses state-specific tinting and labels.
+- Gameflow states are normalized (client closed, lobby, matchmaking, ready check, champ select, in-progress, end of game, reconnect) with consistent messaging and Practice Tool queue naming.
+- Navigation moved to the top bar, the sidebar was removed, Settings is now a tab, and the Match History tab was removed.
+- Player tag UX on player cards improved with a clearer tag button, hover notes, and better tooltip sizing.
+
 ## [1.4.8] - 2025-01-29
 
 ### Fixed
