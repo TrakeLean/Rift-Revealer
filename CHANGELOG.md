@@ -5,6 +5,15 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2025-12-02
+
+### Changed
+- Player cards use skin/champion art as backgrounds with lightweight overlays, tighter padding, and smaller avatars for a more compact roster layout.
+- Tag button restyled to an unobtrusive ghost icon and prevented from toggling card expansion when clicked.
+
+### Fixed
+- Last-match roster avatars now load the correct profile icons by saving `profileIcon`/`profileIconId` from match imports and shipping the top-level `public/profileicon` assets via Vite’s `publicDir`.
+
 ## [1.5.1] - 2025-12-01
 
 ### Changed
@@ -135,15 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned Features
-- Champion mastery display
-- Duplicate account detection
-- Export match history to CSV/JSON
-- Discord Rich Presence integration
-- Multi-account support
-- Rank display per mode
-- Champion pool analysis
-- Win streak indicators
-- Performance trend charts
+
 
 ### Changed
 - Serve cached skin/champion tiles via a local protocol and strip external fallbacks to avoid blocked resources.

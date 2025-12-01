@@ -283,7 +283,8 @@ class DatabaseManager {
         console.error('   participant.puuid:', participant.puuid);
       }
 
-      this.savePlayer(participant.puuid, summonerName, matchData.info.platformId, participant.profileIconId);
+      const profileIconId = participant.profileIconId ?? participant.profileIcon ?? null; // Riot match API uses profileIcon
+      this.savePlayer(participant.puuid, summonerName, matchData.info.platformId, profileIconId);
 
       participantStmt.run(
         matchData.metadata.matchId,

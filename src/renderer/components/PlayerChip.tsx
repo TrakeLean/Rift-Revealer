@@ -111,6 +111,7 @@ export function PlayerChip({
 
   const handleTagButtonClick = (e: React.MouseEvent) => {
     e.stopPropagation() // Prevent card onClick from firing
+    e.preventDefault()
     setTagMenuOpen(true)
   }
 
@@ -199,15 +200,16 @@ export function PlayerChip({
     tileSources.push(`/tiles/${championId}.png`)
   }
   const hasProfileIcon = profileIconId !== null && profileIconId !== undefined
-  const defaultProfileIcon = '/profileicon/0.png' // Local fallback
-  const sources = [
-    skinImageSrc, // Cached/fetched skin tile from LCU assets (served via local://)
-    championImageSrc, // Default champion tile fetched locally via LCU
-    ...tileSources, // Pre-bundled tiles if available
-    hasProfileIcon ? `/profileicon/${profileIconId}.png` : defaultProfileIcon, // Profile icon fallback
-    '/logo.png' // Final local placeholder
+  // Use relative paths so they resolve in both dev (http://localhost) and packaged file:// builds
+  const defaultProfileIcon = 'profileicon/0.png'
+  // Avatar should stay as a profile icon (never fall back to champion art)
+  const avatarSources = [
+    hasProfileIcon ? `profileicon/${profileIconId}.png` : null,
+    defaultProfileIcon,
+    'logo.png'
   ].filter(Boolean) as string[]
-  const currentSrc = sources[imageIndex]
+  const backgroundSrc = skinImageSrc || championImageSrc || tileSources[0] || null
+  const currentSrc = avatarSources[imageIndex]
 
   // Helper to format time ago
   const formatTimeAgo = (date: Date) => {
@@ -248,45 +250,62 @@ export function PlayerChip({
     }[quality]
   }
 
+  const backgroundStyle = backgroundSrc
+    ? {
+        backgroundImage: `url(${backgroundSrc})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      }
+    : undefined
+  const sectionTone = backgroundSrc ? 'bg-black/30' : 'bg-muted/20'
+  const sectionClass = cn('inline-block max-w-full rounded-md px-2 py-1', sectionTone)
+
   return (
     <Card
       className={cn(
-        'transition-all',
+        'transition-all relative overflow-hidden',
         isClickable && 'cursor-pointer',
         className
       )}
+      style={backgroundStyle}
       onClick={onClick}
     >
-      <CardContent className="p-3">
-        <div className="space-y-2.5">
+      {backgroundSrc && (
+        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/45 to-black/30 pointer-events-none" />
+      )}
+      <CardContent className="p-2 relative z-10">
+        <div className="space-y-1.5">
           {/* Header - Player Name & Total Games - Single Line */}
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               {/* Profile/Skin/Champion Icon */}
               {currentSrc ? (
                 <img
                   src={currentSrc}
                   alt={`${summonerName}'s avatar`}
-                  className="h-10 w-10 rounded-md border border-border flex-shrink-0 object-cover"
+                  className="h-8 w-8 rounded-md border border-border flex-shrink-0 object-cover"
                   onError={() => setImageIndex(i => i + 1)}
                 />
               ) : null}
               <User className={cn("h-4 w-4 text-muted-foreground flex-shrink-0", currentSrc && "hidden")} />
-              <span className="text-base font-semibold truncate">{summonerName}</span>
+              <span className="text-sm font-semibold truncate leading-tight">{summonerName}</span>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
               <Button
-                variant="outline"
-                size="sm"
-                className="h-8 px-2 flex items-center gap-1.5"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-primary/80 hover:bg-white/5"
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  e.preventDefault()
+                }}
                 onClick={handleTagButtonClick}
                 title="Tag player"
               >
                 <Tag className={cn(
-                  "h-3.5 w-3.5",
+                  "h-4 w-4",
                   playerTags.length > 0 ? "text-primary" : "text-muted-foreground"
                 )} />
-                <span className="text-xs font-medium hidden sm:inline">Tag</span>
               </Button>
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 {encounterCount} {encounterCount === 1 ? 'game' : 'games'}
@@ -303,32 +322,34 @@ export function PlayerChip({
 
           {/* Enhanced Stats Row - Horizontal, Larger Text */}
           {(asEnemy || asAlly) && (
-            <div className="flex gap-4 text-sm flex-wrap">
-              {/* Ally Stats (shown first) */}
-              {asAlly && asAlly.games > 0 && (
-                <div className="flex items-center gap-2 flex-1 min-w-[170px]">
-                  <span className="text-xs text-emerald-400/70 uppercase font-medium">As Teammate:</span>
-                  <span className={cn("font-bold", getAllyColor(allyQuality))}>
-                    {asAlly.wins}-{asAlly.losses}
-                  </span>
-                  <span className={cn("text-xs", getAllyColor(allyQuality))}>
-                    ({asAlly.winRate}%)
-                  </span>
-                </div>
-              )}
+            <div className={sectionClass}>
+              <div className="flex gap-2 text-[11px] flex-wrap items-center">
+                {/* Ally Stats (shown first) */}
+                {asAlly && asAlly.games > 0 && (
+                  <div className="flex items-center gap-1 flex-1 min-w-[140px]">
+                    <span className="text-[11px] text-emerald-400/70 uppercase font-medium">Teammate:</span>
+                    <span className={cn("font-bold", getAllyColor(allyQuality))}>
+                      {asAlly.wins}-{asAlly.losses}
+                    </span>
+                    <span className={cn("text-[11px]", getAllyColor(allyQuality))}>
+                      ({asAlly.winRate}%)
+                    </span>
+                  </div>
+                )}
 
-              {/* Enemy Stats */}
-              {asEnemy && asEnemy.games > 0 && (
-                <div className="flex items-center gap-2 flex-1 min-w-[170px]">
-                  <span className="text-xs text-red-400/70 uppercase font-medium">As Opponent:</span>
-                  <span className={cn("font-bold", getThreatColor(threatLevel))}>
-                    {asEnemy.wins}-{asEnemy.losses}
-                  </span>
-                  <span className={cn("text-xs", getThreatColor(threatLevel))}>
-                    ({asEnemy.winRate}%)
-                  </span>
-                </div>
-              )}
+                {/* Enemy Stats */}
+                {asEnemy && asEnemy.games > 0 && (
+                  <div className="flex items-center gap-1 flex-1 min-w-[140px]">
+                    <span className="text-[11px] text-red-400/70 uppercase font-medium">Opponent:</span>
+                    <span className={cn("font-bold", getThreatColor(threatLevel))}>
+                      {asEnemy.wins}-{asEnemy.losses}
+                    </span>
+                    <span className={cn("text-[11px]", getThreatColor(threatLevel))}>
+                      ({asEnemy.winRate}%)
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -136,7 +136,7 @@ export function StatsPanel({ asEnemy, asAlly, className }: StatsPanelProps) {
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-emerald-400" />
               <h4 className="text-sm font-semibold text-emerald-400 uppercase tracking-wide">
-                as Teammate
+                Teammate
               </h4>
               <div className="flex-1 h-px bg-emerald-900/30" />
             </div>
@@ -192,7 +192,7 @@ export function StatsPanel({ asEnemy, asAlly, className }: StatsPanelProps) {
             <div className="flex items-center gap-2">
               <Target className="h-4 w-4 text-red-400" />
               <h4 className="text-sm font-semibold text-red-400 uppercase tracking-wide">
-                As Opponent
+                Opponent
               </h4>
               <div className="flex-1 h-px bg-red-900/30" />
             </div>
