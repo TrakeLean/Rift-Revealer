@@ -345,13 +345,15 @@ class DatabaseManager {
       return { games: [], stats: null };
     }
 
-    let games;
     // Normalize common Riot ID variations (trim and strip spaces) so we can match "Name#Tag" and "Name #Tag"
     const trimmedSummoner = summonerName.trim();
     const rawGameName = trimmedSummoner.split('#')[0];
     const gameName = rawGameName.trim();
     const noSpaceSummoner = trimmedSummoner.replace(/\s+/g, '').toLowerCase();
     const noSpaceGame = gameName.replace(/\s+/g, '').toLowerCase();
+
+    // Always start with an empty list; we'll fill it with the first successful query
+    let games = [];
 
     // Priority 1: Match by PUUID if available (most reliable)
     if (puuid) {
@@ -393,9 +395,10 @@ class DatabaseManager {
 
       games = gamesStmt.all(config.puuid, puuid, config.puuid);
     }
-    // Priority 2: Fallback to name matching (for backwards compatibility or when PUUID unavailable)
-    else {
-      console.log(`  DB Query: Searching for "${summonerName}" or "${gameName}"`);
+
+    // Priority 2: Fallback to name matching (PUUIDs can occasionally differ between LCU and Match API)
+    if ((!games || games.length === 0) && summonerName) {
+      console.log(`  DB Query: Searching for "${summonerName}" or "${gameName}" (PUUID lookup empty)`);
 
       // Debug: Check what names are in the database
       const checkStmt = this.db.prepare(`
