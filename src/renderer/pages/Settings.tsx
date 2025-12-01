@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Save, AlertCircle, CheckCircle2, Download, RefreshCw, Loader2 } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle2, Download, RefreshCw, Loader2, Trash2 } from 'lucide-react'
 import type { UserConfig } from '../types'
 
 interface SettingsProps {
@@ -27,6 +27,8 @@ export function Settings({ onConfigSaved }: SettingsProps) {
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const [importProgress, setImportProgress] = useState<{ current: number; total: number; imported: number } | null>(null)
   const [importCancelled, setImportCancelled] = useState(false)
+  const [isClearingCache, setIsClearingCache] = useState(false)
+  const [clearCacheStatus, setClearCacheStatus] = useState<string | null>(null)
 
   useEffect(() => {
     loadConfig()
@@ -150,6 +152,25 @@ export function Settings({ onConfigSaved }: SettingsProps) {
     setImportStatus('Import canceled (in-flight requests may still finish).')
     setImportProgress(null)
     window.api.cancelImportMatchHistory()
+  }
+
+  const handleClearSkinCache = async () => {
+    setIsClearingCache(true)
+    setClearCacheStatus(null)
+    try {
+      const result = await window.api.clearSkinCache()
+      if (result?.success) {
+        const count = result.removed ?? 0
+        setClearCacheStatus(`Cleared ${count} cached skin${count === 1 ? '' : 's'}.`)
+      } else {
+        setClearCacheStatus(result?.error || 'Failed to clear cache')
+      }
+    } catch (error) {
+      console.error('Failed to clear skin cache:', error)
+      setClearCacheStatus('Failed to clear cache')
+    } finally {
+      setIsClearingCache(false)
+    }
   }
 
   const handleSave = async () => {
@@ -459,6 +480,39 @@ export function Settings({ onConfigSaved }: SettingsProps) {
             <div className="text-xs">
               <strong>Import Time:</strong> Importing 100 matches can take ~10-15 seconds due to rate limiting. Progress updates in real time.
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Skin Cache */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Skin Cache</CardTitle>
+          <CardDescription>Cached skin tiles fetched from the League client. Clear them if you need to reclaim space.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={handleClearSkinCache}
+              disabled={isClearingCache}
+            >
+              {isClearingCache ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Clearing...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Clear cached skins
+                </>
+              )}
+            </Button>
+            {clearCacheStatus && (
+              <span className="text-sm text-muted-foreground">{clearCacheStatus}</span>
+            )}
           </div>
         </CardContent>
       </Card>

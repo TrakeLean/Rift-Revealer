@@ -38,55 +38,188 @@ class DatabaseManager {
   }
 
   runMigrations() {
-    // Check if profile_icon_id column exists in players table
+    // Disable foreign keys during destructive migrations to avoid intermediate violations
+    this.db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      // Migrate user_config to single-row unique table
+      const userInfo = this.db.prepare("PRAGMA table_info(user_config)").all();
+      const userCountRow = this.db.prepare('SELECT COUNT(*) as cnt FROM user_config').get() || { cnt: 0 };
+      const needsUserMigration =
+        userInfo.some(col => col.name === 'id' && col.pk !== 1) ||
+      userInfo.some(col => col.name === 'puuid' && !col.notnull) ||
+      !userInfo.some(col => col.name === 'auto_update_check') ||
+      !userInfo.some(col => col.name === 'auto_start') ||
+      userCountRow.cnt !== 1;
+    if (needsUserMigration) {
+      console.log('Running migration: Rebuilding user_config table');
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS user_config_new (
+          id INTEGER PRIMARY KEY CHECK(id = 1),
+          puuid TEXT NOT NULL UNIQUE,
+          summoner_name TEXT NOT NULL,
+          region TEXT NOT NULL,
+          riot_api_key TEXT,
+          last_updated INTEGER,
+          auto_update_check INTEGER DEFAULT 1,
+          auto_start INTEGER DEFAULT 0
+        )
+      `);
+      let latest = null;
+      try {
+        latest = this.db.prepare(`
+          SELECT puuid, summoner_name, region, riot_api_key, last_updated, auto_update_check, auto_start
+          FROM user_config
+          ORDER BY last_updated DESC
+          LIMIT 1
+        `).get();
+      } catch (err) {
+        // older schema without columns; fetch what we can
+        try {
+          latest = this.db.prepare(`
+            SELECT puuid, summoner_name, region, riot_api_key, last_updated
+            FROM user_config
+            ORDER BY last_updated DESC
+            LIMIT 1
+          `).get();
+        } catch (_) {
+          latest = null;
+        }
+      }
+      if (latest) {
+        this.db.prepare(`
+          INSERT OR REPLACE INTO user_config_new
+            (id, puuid, summoner_name, region, riot_api_key, last_updated, auto_update_check, auto_start)
+          VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          latest.puuid,
+          latest.summoner_name,
+          latest.region,
+          latest.riot_api_key,
+          latest.last_updated || Date.now(),
+          latest.auto_update_check ?? 1,
+          latest.auto_start ?? 0
+        );
+      }
+      this.db.exec('DROP TABLE user_config');
+      this.db.exec('ALTER TABLE user_config_new RENAME TO user_config');
+    }
+
+    // Migrate players table to drop skin_id
     const playersInfo = this.db.prepare("PRAGMA table_info(players)").all();
-    const hasProfileIconInPlayers = playersInfo.some(col => col.name === 'profile_icon_id');
     const hasSkinInPlayers = playersInfo.some(col => col.name === 'skin_id');
+    if (hasSkinInPlayers) {
+      console.log('Running migration: Rebuilding players table without skin_id');
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS players_new (
+          puuid TEXT PRIMARY KEY,
+          summoner_name TEXT NOT NULL,
+          region TEXT NOT NULL,
+          last_seen INTEGER,
+          profile_icon_id INTEGER
+        )
+      `);
+      this.db.exec(`
+        INSERT OR IGNORE INTO players_new (puuid, summoner_name, region, last_seen, profile_icon_id)
+        SELECT puuid, summoner_name, region, last_seen, profile_icon_id FROM players
+      `);
+      this.db.exec('DROP TABLE players');
+      this.db.exec('ALTER TABLE players_new RENAME TO players');
+    }
 
+    // Migrate match_participants to drop unused columns
     const participantsInfo = this.db.prepare("PRAGMA table_info(match_participants)").all();
-    const hasProfileIconInParticipants = participantsInfo.some(col => col.name === 'profile_icon_id');
+    const removedCols = ['profile_icon_id', 'role', 'team_position', 'gold_earned', 'total_minions_killed', 'total_damage_to_champions'];
+    const needsParticipantMigration = participantsInfo.some(col => removedCols.includes(col.name));
+    if (needsParticipantMigration) {
+      console.log('Running migration: Rebuilding match_participants without unused columns');
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS match_participants_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          match_id TEXT NOT NULL,
+          puuid TEXT NOT NULL,
+          summoner_name TEXT,
+          champion_name TEXT,
+          champion_id INTEGER,
+          team_id INTEGER,
+          kills INTEGER,
+          deaths INTEGER,
+          assists INTEGER,
+          win INTEGER,
+          lane TEXT,
+          FOREIGN KEY (match_id) REFERENCES matches(match_id),
+          FOREIGN KEY (puuid) REFERENCES players(puuid)
+        )
+      `);
+      this.db.exec(`
+        INSERT INTO match_participants_new (
+          match_id, puuid, summoner_name, champion_name, champion_id, team_id,
+          kills, deaths, assists, win, lane
+        )
+        SELECT
+          match_id, puuid, summoner_name, champion_name, champion_id, team_id,
+          kills, deaths, assists, win, lane
+        FROM match_participants
+      `);
+      this.db.exec('DROP TABLE match_participants');
+      this.db.exec('ALTER TABLE match_participants_new RENAME TO match_participants');
+    }
 
-    if (!hasProfileIconInPlayers) {
-      console.log('Running migration: Adding profile_icon_id to players table');
-      this.db.exec('ALTER TABLE players ADD COLUMN profile_icon_id INTEGER');
+    // Skin cache table for fetched skin assets
+    const hasSkinCache = this.db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='skin_cache'`).get();
+    if (!hasSkinCache) {
+      console.log('Running migration: Creating skin_cache table');
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS skin_cache (
+          skin_id INTEGER PRIMARY KEY,
+          champion_id INTEGER,
+          file_path TEXT NOT NULL,
+          last_fetched INTEGER
+        )
+      `);
     }
-    if (!hasSkinInPlayers) {
-      console.log('Running migration: Adding skin_id to players table');
-      this.db.exec('ALTER TABLE players ADD COLUMN skin_id INTEGER');
-    }
-    if (!hasProfileIconInParticipants) {
-      console.log('Running migration: Adding profile_icon_id to match_participants table');
-      this.db.exec('ALTER TABLE match_participants ADD COLUMN profile_icon_id INTEGER');
-    }
+
+    // Recreate key indexes (safe to re-run)
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_participants_match ON match_participants(match_id);
+      CREATE INDEX IF NOT EXISTS idx_participants_puuid ON match_participants(puuid);
+      CREATE INDEX IF NOT EXISTS idx_matches_creation ON matches(game_creation);
+      CREATE INDEX IF NOT EXISTS idx_players_name ON players(summoner_name);
+      CREATE INDEX IF NOT EXISTS idx_player_tags_puuid ON player_tags(puuid);
+    `);
 
     console.log('Database migrations completed');
+    } finally {
+      this.db.exec('PRAGMA foreign_keys = ON');
+    }
   }
 
   getUserConfig() {
-    const stmt = this.db.prepare('SELECT * FROM user_config ORDER BY id DESC LIMIT 1');
+    const stmt = this.db.prepare('SELECT * FROM user_config LIMIT 1');
     return stmt.get();
   }
 
   saveUserConfig(config) {
     const stmt = this.db.prepare(`
-      INSERT INTO user_config (puuid, summoner_name, region, riot_api_key, last_updated)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO user_config (id, puuid, summoner_name, region, riot_api_key, last_updated, auto_update_check, auto_start)
+      VALUES (1, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 0))
     `);
     return stmt.run(
       config.puuid,
       config.summoner_name,
       config.region,
       config.riot_api_key,
-      Date.now()
+      Date.now(),
+      config.auto_update_check ?? 1,
+      config.auto_start ?? 0
     );
   }
 
-  savePlayer(puuid, summonerName, region, profileIconId = null, skinId = null) {
+  savePlayer(puuid, summonerName, region, profileIconId = null) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO players (puuid, summoner_name, region, last_seen, profile_icon_id, skin_id)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO players (puuid, summoner_name, region, last_seen, profile_icon_id)
+      VALUES (?, ?, ?, ?, ?)
     `);
-    return stmt.run(puuid, summonerName, region, Date.now(), profileIconId, skinId);
+    return stmt.run(puuid, summonerName, region, Date.now(), profileIconId);
   }
 
   saveMatch(matchData) {
@@ -118,9 +251,8 @@ class DatabaseManager {
     const participantStmt = this.db.prepare(`
       INSERT INTO match_participants (
         match_id, puuid, summoner_name, champion_name, champion_id, team_id,
-        kills, deaths, assists, win, total_damage_dealt, total_damage_to_champions,
-        total_minions_killed, gold_earned, role, lane, team_position, profile_icon_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        kills, deaths, assists, win, lane
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const participant of matchData.info.participants) {
@@ -152,7 +284,6 @@ class DatabaseManager {
       }
 
       this.savePlayer(participant.puuid, summonerName, matchData.info.platformId, participant.profileIconId);
-      // Skin not available from match API; leave null
 
       participantStmt.run(
         matchData.metadata.matchId,
@@ -165,16 +296,31 @@ class DatabaseManager {
         participant.deaths,
         participant.assists,
         participant.win ? 1 : 0,
-        participant.totalDamageDealt,
-        participant.totalDamageDealtToChampions,
-        participant.totalMinionsKilled,
-        participant.goldEarned,
-        participant.role,
-        participant.lane,
-        participant.teamPosition,
-        participant.profileIconId || null
+        participant.lane
       );
     }
+  }
+
+  // Skin cache helpers
+  getSkinCacheEntry(skinId) {
+    const stmt = this.db.prepare('SELECT * FROM skin_cache WHERE skin_id = ?');
+    return stmt.get(skinId);
+  }
+
+  upsertSkinCacheEntry(skinId, championId, filePath) {
+    const stmt = this.db.prepare(`
+      INSERT INTO skin_cache (skin_id, champion_id, file_path, last_fetched)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(skin_id) DO UPDATE SET
+        champion_id=excluded.champion_id,
+        file_path=excluded.file_path,
+        last_fetched=excluded.last_fetched
+    `);
+    return stmt.run(skinId, championId, filePath, Date.now());
+  }
+
+  clearSkinCache() {
+    this.db.exec('DELETE FROM skin_cache');
   }
 
   // Helper: Categorize queue IDs into game modes
@@ -209,26 +355,26 @@ class DatabaseManager {
           m.game_duration,
           m.queue_id,
           opponent.summoner_name as opponent_name,
-          opponent.team_position as opponent_team_position,
+          opponent.lane as opponent_team_position,
           opponent.lane as opponent_lane,
-          opponent.role as opponent_role,
+          opponent.lane as opponent_role,
           opponent.champion_name as opponent_champion,
           opponent.kills as opponent_kills,
           opponent.deaths as opponent_deaths,
           opponent.assists as opponent_assists,
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
-          opponent.profile_icon_id as opponent_profile_icon,
+          NULL as opponent_profile_icon,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
           user.assists as user_assists,
           user.win as user_win,
           user.team_id as user_team,
-          user.total_damage_to_champions as user_damage,
-          opponent.total_damage_to_champions as opponent_damage,
-          user.total_minions_killed as user_cs,
-          opponent.total_minions_killed as opponent_cs
+          0 as user_damage,
+          0 as opponent_damage,
+          0 as user_cs,
+          0 as opponent_cs
         FROM matches m
         INNER JOIN match_participants user ON m.match_id = user.match_id AND user.puuid = ?
         INNER JOIN match_participants opponent ON m.match_id = opponent.match_id
@@ -263,26 +409,26 @@ class DatabaseManager {
           m.game_duration,
           m.queue_id,
           opponent.summoner_name as opponent_name,
-          opponent.team_position as opponent_team_position,
+          opponent.lane as opponent_team_position,
           opponent.lane as opponent_lane,
-          opponent.role as opponent_role,
+          opponent.lane as opponent_role,
           opponent.champion_name as opponent_champion,
           opponent.kills as opponent_kills,
           opponent.deaths as opponent_deaths,
           opponent.assists as opponent_assists,
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
-          opponent.profile_icon_id as opponent_profile_icon,
+          NULL as opponent_profile_icon,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
           user.assists as user_assists,
           user.win as user_win,
           user.team_id as user_team,
-          user.total_damage_to_champions as user_damage,
-          opponent.total_damage_to_champions as opponent_damage,
-          user.total_minions_killed as user_cs,
-          opponent.total_minions_killed as opponent_cs
+          0 as user_damage,
+          0 as opponent_damage,
+          0 as user_cs,
+          0 as opponent_cs
         FROM matches m
         INNER JOIN match_participants user ON m.match_id = user.match_id AND user.puuid = ?
         INNER JOIN match_participants opponent ON m.match_id = opponent.match_id
@@ -490,7 +636,7 @@ class DatabaseManager {
     const lastSeen = {
       timestamp: new Date(lastGame.game_creation),
       champion: lastGame.opponent_champion,
-      role: lastGame.team_position || null,
+      role: lastGame.opponent_team_position || lastGame.opponent_lane || null,
       outcome: lastGame.user_win === 1 ? 'win' : 'loss',
       isAlly
     };
@@ -569,12 +715,9 @@ class DatabaseManager {
         mp.champion_name,
         mp.champion_id,
         mp.team_id,
-        mp.role,
         mp.lane,
-        mp.team_position,
-        mp.profile_icon_id,
         mp.win,
-        p.skin_id as skin_id
+        p.profile_icon_id as profile_icon_id
       FROM match_participants mp
       LEFT JOIN players p ON p.puuid = mp.puuid
       WHERE mp.match_id = ?
@@ -598,12 +741,12 @@ class DatabaseManager {
         championId: p.champion_id,
         championName: p.champion_name,
         teamId: p.team_id,
-        role: p.role,
+        role: null,
         lane: p.lane,
-        teamPosition: p.team_position,
+        teamPosition: p.lane,
         profileIconId: p.profile_icon_id,
         win: p.win === 1,
-        skinId: p.skin_id || null
+        skinId: null
       });
     }
 
@@ -641,7 +784,7 @@ class DatabaseManager {
           gamesTransformed = history.games.map(g => ({
             gameId: g.match_id,
             champion: g.opponent_champion,
-            role: g.team_position,
+            role: g.opponent_team_position || g.opponent_lane || null,
             outcome: g.user_win === 1 ? 'win' : 'loss',
             kda: {
               kills: g.opponent_kills,

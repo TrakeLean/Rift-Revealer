@@ -68,6 +68,7 @@ export function PlayerChip({
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
   const [playerTags, setPlayerTags] = useState<any[]>(tagsProp || [])
   const [imageIndex, setImageIndex] = useState(0)
+  const [skinImageSrc, setSkinImageSrc] = useState<string | null>(null)
   const isClickable = Boolean(onClick)
 
   // Load tags for this player
@@ -117,10 +118,37 @@ export function PlayerChip({
     loadTags()
   }, [puuid])
 
+  // Load cached/fetched skin image from main process
+  useEffect(() => {
+    let cancelled = false
+    async function loadSkinImage() {
+      if (!window.api?.getSkinImage || skinId === null || skinId === undefined || championId === null || championId === undefined) {
+        if (!cancelled) setSkinImageSrc(null)
+        return
+      }
+      try {
+        const result = await window.api.getSkinImage(skinId, championId)
+        if (!cancelled) {
+          if (result?.success && result.path) {
+            setSkinImageSrc(result.path)
+          } else {
+            setSkinImageSrc(null)
+          }
+        }
+      } catch (err) {
+        if (!cancelled) setSkinImageSrc(null)
+      }
+    }
+    loadSkinImage()
+    return () => {
+      cancelled = true
+    }
+  }, [skinId, championId])
+
   // Reset image fallback when source set changes
   useEffect(() => {
     setImageIndex(0)
-  }, [skinId, profileIconId, championName, championId])
+  }, [skinId, profileIconId, championName, championId, skinImageSrc])
 
   const skinNum = typeof skinId === 'number' ? skinId % 1000 : undefined
   const champFromSkin = typeof skinId === 'number' ? Math.floor(skinId / 1000) : undefined
@@ -134,10 +162,18 @@ export function PlayerChip({
       tileSources.push(`/tiles/${championId}_${skinNum ?? 0}.png`)
     }
   }
+  // Base champion tile fallbacks (no remote calls)
+  if ((skinId === null || skinId === undefined) && championId !== undefined && championId !== null) {
+    tileSources.push(`/tiles/${championId}_0.png`)
+    tileSources.push(`/tiles/${championId}.png`)
+  }
+  const hasProfileIcon = profileIconId !== null && profileIconId !== undefined
+  const defaultProfileIcon = '/profileicon/0.png' // Local fallback
   const sources = [
-    ...tileSources,
-    profileIconId ? `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/${profileIconId}.png` : null,
-    championName ? `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/champion/${championName}.png` : null
+    skinImageSrc, // Cached/fetched skin tile from LCU assets
+    ...tileSources, // Pre-bundled tiles if available
+    hasProfileIcon ? `/profileicon/${profileIconId}.png` : defaultProfileIcon, // Profile icon fallback
+    '/logo.png' // Final local placeholder
   ].filter(Boolean) as string[]
   const currentSrc = sources[imageIndex]
 

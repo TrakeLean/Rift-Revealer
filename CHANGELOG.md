@@ -5,6 +5,13 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2025-12-01
+
+### Changed
+- Simplified database schema: removed unused participant fields (profile icon, roles, gold/CS/damage) and per-player skin_id; user_config now enforces a single row keyed by puuid with replace semantics.
+- Skin cache now persists paths in the database and migrations temporarily disable foreign keys to avoid failures during rebuilds.
+- Removed external ddragon champion icon fallback; PlayerChip now uses cached skin, local tiles/profile icons, and local logo fallback only.
+
 ## [1.5.0] - 2025-12-01
 
 ### Added

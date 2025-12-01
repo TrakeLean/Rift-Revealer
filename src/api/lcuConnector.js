@@ -177,6 +177,15 @@ class LCUConnector {
 
     if (gameSession && gameSession.gameData && gameSession.gameData.teamOne) {
       const players = [];
+
+      // Map selected skin indexes by PUUID (available during/after champ select)
+      const selectionMap = new Map();
+      for (const sel of gameSession.gameData.playerChampionSelections || []) {
+        if (sel.puuid !== undefined && sel.puuid !== null) {
+          selectionMap.set(sel.puuid, sel.selectedSkinIndex);
+        }
+      }
+
       const allPlayers = [
         ...(gameSession.gameData.teamOne || []),
         ...(gameSession.gameData.teamTwo || [])
@@ -196,6 +205,13 @@ class LCUConnector {
           }
         }
 
+        // Derive skinId from selection index when skinId is missing
+        let skinId = player.skinId || null;
+        const selectedSkinIndex = selectionMap.get(player.puuid);
+        if ((skinId === null || skinId === undefined) && selectedSkinIndex !== undefined && selectedSkinIndex !== null && player.championId !== undefined && player.championId !== null) {
+          skinId = player.championId * 1000 + selectedSkinIndex;
+        }
+
         players.push({
           summonerId: player.summonerId,
           puuid: summoner ? summoner.puuid : null,
@@ -203,7 +219,7 @@ class LCUConnector {
           championId: player.championId,
           teamId: player.teamId,
           profileIconId: summoner ? summoner.profileIconId || null : null,
-          skinId: player.skinId || null,
+          skinId,
           source: 'inGame'
         });
       }
