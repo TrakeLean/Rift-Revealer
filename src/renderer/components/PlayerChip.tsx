@@ -69,6 +69,7 @@ export function PlayerChip({
   const [playerTags, setPlayerTags] = useState<any[]>(tagsProp || [])
   const [imageIndex, setImageIndex] = useState(0)
   const [skinImageSrc, setSkinImageSrc] = useState<string | null>(null)
+  const [championImageSrc, setChampionImageSrc] = useState<string | null>(null)
   const isClickable = Boolean(onClick)
 
   // Load tags for this player
@@ -145,13 +146,43 @@ export function PlayerChip({
     }
   }, [skinId, championId])
 
+  // Load champion tile when no explicit skin is provided
+  useEffect(() => {
+    let cancelled = false
+    async function loadChampTile() {
+      if (!window.api?.getChampionTile || championId === null || championId === undefined || skinId !== null && skinId !== undefined) {
+        if (!cancelled) setChampionImageSrc(null)
+        return
+      }
+      try {
+        const result = await window.api.getChampionTile(championId)
+        if (!cancelled) {
+          if (result?.success && result.path) {
+            setChampionImageSrc(result.path)
+          } else {
+            setChampionImageSrc(null)
+          }
+        }
+      } catch (err) {
+        if (!cancelled) setChampionImageSrc(null)
+      }
+    }
+    loadChampTile()
+    return () => {
+      cancelled = true
+    }
+  }, [championId, skinId])
+
   // Reset image fallback when source set changes
   useEffect(() => {
     setImageIndex(0)
-  }, [skinId, profileIconId, championName, championId, skinImageSrc])
+    // If the champion tile finishes loading after we already fell back (e.g., to the logo),
+    // retry from the top of the source list so the new tile can render.
+  }, [skinId, profileIconId, championName, championId, skinImageSrc, championImageSrc])
 
   const skinNum = typeof skinId === 'number' ? skinId % 1000 : undefined
   const champFromSkin = typeof skinId === 'number' ? Math.floor(skinId / 1000) : undefined
+  const champSlug = championName ? championName.toLowerCase().replace(/[^a-z0-9]/g, '') : null
   const tileSources: string[] = []
   if (skinId !== null && skinId !== undefined) {
     tileSources.push(`/tiles/${skinId}.png`)
@@ -170,7 +201,8 @@ export function PlayerChip({
   const hasProfileIcon = profileIconId !== null && profileIconId !== undefined
   const defaultProfileIcon = '/profileicon/0.png' // Local fallback
   const sources = [
-    skinImageSrc, // Cached/fetched skin tile from LCU assets
+    skinImageSrc, // Cached/fetched skin tile from LCU assets (served via local://)
+    championImageSrc, // Default champion tile fetched locally via LCU
     ...tileSources, // Pre-bundled tiles if available
     hasProfileIcon ? `/profileicon/${profileIconId}.png` : defaultProfileIcon, // Profile icon fallback
     '/logo.png' // Final local placeholder
@@ -181,13 +213,19 @@ export function PlayerChip({
   const formatTimeAgo = (date: Date) => {
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
+    const diffMinutes = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-    if (diffDays === 0) return 'Today'
+    if (diffMinutes < 1) return 'Just now'
+    if (diffMinutes < 60) return `${diffMinutes} min ago`
+    if (diffHours < 24) return `${diffHours} hr${diffHours === 1 ? '' : 's'} ago`
     if (diffDays === 1) return '1 day ago'
     if (diffDays < 7) return `${diffDays} days ago`
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-    return `${Math.floor(diffDays / 30)} months ago`
+    const weeks = Math.floor(diffDays / 7)
+    if (weeks < 5) return `${weeks} wk${weeks === 1 ? '' : 's'} ago`
+    const months = Math.floor(diffDays / 30)
+    return `${months} mo${months === 1 ? '' : 's'} ago`
   }
 
   // Get threat color based on level

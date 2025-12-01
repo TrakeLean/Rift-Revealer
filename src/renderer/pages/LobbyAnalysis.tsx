@@ -34,6 +34,7 @@ const QUEUE_NAMES: Record<number, string> = {
   1400: 'Ultimate Spellbook',
   1700: 'Arena',
   1900: 'Pick URF',
+  2400: 'ARAM Mayhem',
   3140: 'Practice Tool'
 }
 
@@ -47,7 +48,7 @@ export function LobbyAnalysis() {
     state: string
     message: string
     isAnonymized?: boolean
-    queueId?: number
+    queueId?: number | string
     queueName?: string
   } | null>(null)
   const [lastRoster, setLastRoster] = useState<LastMatchRoster | null>(null)
@@ -85,9 +86,11 @@ export function LobbyAnalysis() {
 
   const isLiveState = useCallback((normalized: string) => LIVE_STATES.includes(normalized), [])
 
-  const getQueueName = (queueId?: number) => {
+  const getQueueName = (queueId?: number | string) => {
     if (queueId === undefined || queueId === null) return 'Unknown Queue'
-    return QUEUE_NAMES[queueId] || `Queue ${queueId}`
+    const normalizedId = Number(typeof queueId === 'string' ? queueId.trim() : queueId)
+    const fallbackKey = typeof queueId === 'string' ? queueId.trim() : String(queueId)
+    return QUEUE_NAMES[normalizedId] || QUEUE_NAMES[fallbackKey] || `Queue ${queueId}`
   }
 
   const getRoleOrder = (player?: RosterPlayer) => {
@@ -269,6 +272,8 @@ export function LobbyAnalysis() {
           message: `Game auto-imported! Added ${data.imported} match(es) to your history.`,
           type: 'success'
         })
+        // Refresh last roster so the just-finished game shows up
+        loadLastRoster()
       }
     })
 
