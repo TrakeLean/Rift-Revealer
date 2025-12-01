@@ -212,6 +212,8 @@ export interface WindowAPI {
   getPlayerTags: (puuid: string) => Promise<IPCResponse<any[]>>
   getAllTaggedPlayers: () => Promise<IPCResponse<any[]>>
   getLastMatchRoster: () => Promise<IPCResponse<LastMatchRoster>>
+  getSkinImage: (skinId: number, championId: number) => Promise<IPCResponse<{ path: string }>>
+  getChampionTile: (championId: number) => Promise<IPCResponse<{ path: string }>>
 }
 
 declare global {

@@ -145,6 +145,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Win streak indicators
 - Performance trend charts
 
+### Changed
+- Serve cached skin/champion tiles via a local protocol and strip external fallbacks to avoid blocked resources.
+- Added champion tile IPC handler and wiring so roster avatars can resolve without CommunityDragon.
+- Enabled Flex analysis in champ select by limiting anonymized queues to Ranked Solo/Duo.
+
 ---
 
 ## Version History

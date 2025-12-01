@@ -327,7 +327,7 @@ class DatabaseManager {
   categorizeQueue(queueId) {
     const ranked = [420, 440]; // Ranked Solo/Duo, Ranked Flex
     const normal = [400, 430]; // Normal Draft, Normal Blind
-    const aram = [450, 100]; // ARAM
+    const aram = [450, 100, 2400]; // ARAM (includes ARAM Mayhem)
     const arena = [1700]; // Arena
     const other = [0, 700, 720, 830, 840, 850, 900, 1020, 1300, 1400, 1900]; // Custom, Clash, URF, etc.
 
@@ -345,6 +345,12 @@ class DatabaseManager {
     }
 
     let games;
+    // Normalize common Riot ID variations (trim and strip spaces) so we can match "Name#Tag" and "Name #Tag"
+    const trimmedSummoner = summonerName.trim();
+    const rawGameName = trimmedSummoner.split('#')[0];
+    const gameName = rawGameName.trim();
+    const noSpaceSummoner = trimmedSummoner.replace(/\s+/g, '').toLowerCase();
+    const noSpaceGame = gameName.replace(/\s+/g, '').toLowerCase();
 
     // Priority 1: Match by PUUID if available (most reliable)
     if (puuid) {
@@ -388,9 +394,6 @@ class DatabaseManager {
     }
     // Priority 2: Fallback to name matching (for backwards compatibility or when PUUID unavailable)
     else {
-      // Extract game name from Riot ID (e.g., "Player#TAG" -> "Player")
-      const gameName = summonerName.split('#')[0];
-
       console.log(`  DB Query: Searching for "${summonerName}" or "${gameName}"`);
 
       // Debug: Check what names are in the database
@@ -433,16 +436,29 @@ class DatabaseManager {
         INNER JOIN match_participants user ON m.match_id = user.match_id AND user.puuid = ?
         INNER JOIN match_participants opponent ON m.match_id = opponent.match_id
           AND (
+            -- Exact match
             LOWER(opponent.summoner_name) = LOWER(?)
-            OR LOWER(opponent.summoner_name) = LOWER(?)
+            OR LOWER(TRIM(opponent.summoner_name)) = LOWER(?)
+            -- Ignore spaces inside the Riot ID (e.g., "Name #Tag" vs "Name#Tag")
+            OR LOWER(REPLACE(opponent.summoner_name, ' ', '')) = ?
+            -- Match on game name portion with or without spaces
             OR LOWER(opponent.summoner_name) LIKE LOWER(? || '#%')
+            OR LOWER(REPLACE(opponent.summoner_name, ' ', '')) LIKE LOWER(? || '#%')
           )
           AND opponent.puuid != ?
         WHERE m.game_creation < (strftime('%s', 'now') - 1800) * 1000
         ORDER BY m.game_creation DESC
       `);
 
-      games = gamesStmt.all(config.puuid, summonerName, gameName, gameName, config.puuid);
+      games = gamesStmt.all(
+        config.puuid,
+        trimmedSummoner,
+        trimmedSummoner,
+        noSpaceSummoner,
+        gameName,
+        noSpaceGame,
+        config.puuid
+      );
     }
 
     if (games.length === 0) {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, protocol } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -16,6 +16,7 @@ let riotApi;
 let lcuConnector;
 let autoMonitorInterval = null;
 let updateChecker = null;
+let localProtocolRegistered = false;
 
 // Configure auto-updater
 autoUpdater.autoDownload = false; // We'll download manually after user confirmation
@@ -26,8 +27,13 @@ let currentGameflowState = null;
 let lastAnalyzedPlayers = null;
 let gameImported = false; // Track if we've imported the current game
 
+// Force a consistent userData path so dev/prod share the same DB/cache
+const userDataDir = path.join(app.getPath('appData'), 'rift-revealer');
+app.setPath('userData', userDataDir);
+console.log('User data path set to:', userDataDir);
+
 // Queue types that anonymize player names until game starts
-const ANONYMIZED_QUEUES = [420, 440]; // Ranked Solo/Duo, Ranked Flex
+const ANONYMIZED_QUEUES = [420]; // Ranked Solo/Duo (allow Flex analysis in champ select)
 
 // Queue type mappings
 const QUEUE_NAMES = {
@@ -58,6 +64,26 @@ function getSkinCacheDir() {
     fs.mkdirSync(dir, { recursive: true });
   }
   return dir;
+}
+
+function toLocalSkinUrl(filePath) {
+  const fileName = path.basename(filePath);
+  return `local://skin-cache/${fileName}`;
+}
+
+function registerLocalProtocol() {
+  if (localProtocolRegistered) return;
+  protocol.registerFileProtocol('local', (request, callback) => {
+    try {
+      const urlPath = request.url.replace('local://', '');
+      const targetPath = path.join(app.getPath('userData'), urlPath);
+      callback({ path: targetPath });
+    } catch (err) {
+      callback({ error: -6 }); // net::ERR_FILE_NOT_FOUND
+    }
+  });
+  localProtocolRegistered = true;
+  console.log('Registered local:// protocol for cached assets');
 }
 
 function findCachedSkinFile(skinId) {
@@ -135,7 +161,7 @@ async function fetchAndCacheSkinImage(skinId, championId) {
   const ext = path.extname(tilePath) || '.jpg';
   const targetPath = path.join(getSkinCacheDir(), `${skinId}${ext}`);
   if (fs.existsSync(targetPath)) {
-    return targetPath;
+    return toLocalSkinUrl(targetPath);
   }
 
   const auth = Buffer.from(`riot:${lcuConnector.credentials.token}`).toString('base64');
@@ -173,28 +199,73 @@ async function fetchAndCacheSkinImage(skinId, championId) {
     req.end();
   });
 
-  return targetPath;
+  return toLocalSkinUrl(targetPath);
 }
 
 async function getSkinImagePath(skinId, championId) {
   // 1) cached
   const cached = findCachedSkinFile(skinId);
   if (cached) {
-    return pathToFileURL(cached).href;
+    return toLocalSkinUrl(cached);
   }
 
   // 2) fetch and cache if possible
   const downloaded = await fetchAndCacheSkinImage(skinId, championId);
   if (downloaded) {
     try {
-      db?.upsertSkinCacheEntry(skinId, championId, downloaded);
+      const rawPath = downloaded.startsWith('local://')
+        ? path.join(getSkinCacheDir(), path.basename(downloaded))
+        : downloaded;
+      db?.upsertSkinCacheEntry(skinId, championId, rawPath);
     } catch (err) {
       console.error('Failed to record skin cache entry:', err.message);
     }
-    return pathToFileURL(downloaded).href;
+    return downloaded;
   }
 
   return null;
+}
+
+// Fetch a champion's default tile if no specific skin is provided
+async function getChampionTilePath(championId) {
+  if (championId === null || championId === undefined) {
+    return null;
+  }
+
+  if (!lcuConnector) {
+    return null;
+  }
+
+  // Refresh credentials if needed
+  if (!lcuConnector.credentials) {
+    const creds = lcuConnector.findLeagueClientCredentials();
+    if (!creds) {
+      console.warn('[SkinCache] No LCU credentials available; cannot fetch champion tile');
+      return null;
+    }
+    lcuConnector.credentials = creds;
+  }
+
+  // Get champion skin metadata
+  let champData;
+  try {
+    champData = await lcuConnector.makeRequest(`/lol-game-data/assets/v1/champions/${championId}.json`);
+  } catch (err) {
+    console.error('Failed to fetch champion data for default tile:', err.message);
+    return null;
+  }
+
+  if (!champData || !Array.isArray(champData.skins) || champData.skins.length === 0) {
+    return null;
+  }
+
+  const defaultSkin = champData.skins[0];
+  if (!defaultSkin?.id) {
+    return null;
+  }
+
+  // Reuse skin fetcher for the default skin id
+  return await getSkinImagePath(defaultSkin.id, championId);
 }
 
 // Helper to get queue name
@@ -405,11 +476,14 @@ if (!gotTheLock) {
     }
   });
 
-  app.whenReady().then(() => {
+app.whenReady().then(() => {
   console.log('=== APP READY ===');
   console.log('App path:', app.getAppPath());
   console.log('User data:', app.getPath('userData'));
   console.log('Is packaged:', app.isPackaged);
+
+  // Allow loading local cached assets via local:// protocol
+  registerLocalProtocol();
 
   try {
     console.log('Initializing database...');
@@ -525,6 +599,19 @@ ipcMain.handle('get-skin-image', async (event, skinId, championId) => {
     return { success: true, path: resolvedPath };
   } catch (error) {
     console.error('Failed to get skin image:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-champion-tile', async (event, championId) => {
+  try {
+    const resolvedPath = await getChampionTilePath(championId);
+    if (!resolvedPath) {
+      return { success: false, error: 'Champion tile not available' };
+    }
+    return { success: true, path: resolvedPath };
+  } catch (error) {
+    console.error('Failed to get champion tile:', error);
     return { success: false, error: error.message };
   }
 });
