@@ -455,7 +455,7 @@ class DatabaseManager {
             -- Exact username match (case-insensitive, no spaces)
             LOWER(REPLACE(opponent.username, ' ', '')) = ?
             -- Also match tagline if provided
-            ${tagLine ? 'AND LOWER(REPLACE(opponent.tag_line, ' ', '')) = ?' : ''}
+            ${tagLine ? "AND LOWER(REPLACE(opponent.tag_line, ' ', '')) = ?" : ''}
           )
           AND opponent.puuid != ?
         WHERE m.game_creation < (strftime('%s', 'now') - 1800) * 1000
