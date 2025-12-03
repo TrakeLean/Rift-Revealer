@@ -875,9 +875,11 @@ class DatabaseManager {
               timestamp: new Date(g.game_creation),
               isAlly: g.user_team === g.opponent_team
             }));
+          } else {
+            console.log(`[Last Match Roster] No history found for ${formatRiotId(p.username, p.tagLine)} (PUUID: ${p.puuid})`);
           }
         } catch (err) {
-          // Swallow errors; leave defaults
+          console.error(`[Last Match Roster] Error getting history for ${formatRiotId(p.username, p.tagLine)}:`, err.message);
         }
       }
 
