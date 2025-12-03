@@ -911,9 +911,9 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
   console.log('Your summoner name (from config):', formatRiotId(config.username, config.tag_line));
 
   // Cache live skin selections so match imports can persist skin IDs
-  // Don't clear cache - merge with existing to preserve skins across state transitions
+  // Replace cache with current lobby data (cache was already cleared before calling this function)
   if (db?.setLiveSkinSelections) {
-    db.setLiveSkinSelections(lobbyPlayers, false); // clearFirst=false to merge
+    db.setLiveSkinSelections(lobbyPlayers, false); // clearFirst=false since we cleared it earlier
   }
 
   const analysis = [];
@@ -1103,6 +1103,11 @@ async function startGameflowMonitor() {
           const hasIdentifiablePlayers = lobbyPlayers.some(p => p.puuid || (p.username && p.tagLine));
 
           if (hasIdentifiablePlayers && playerHash !== lastAnalyzedPlayers) {
+            // Clear cache on first analysis of a new lobby
+            if (!lastAnalyzedPlayers && db?.setLiveSkinSelections) {
+              db.setLiveSkinSelections([], true); // clearFirst=true for new lobby
+              console.log('  [Skin Cache] Cleared for new ChampSelect lobby');
+            }
             lastAnalyzedPlayers = playerHash;
             console.log(`=== ANALYZING LOBBY (ChampSelect - ${queueName}) ===`);
             await analyzeLobbyPlayers(lobbyPlayers);
@@ -1126,6 +1131,11 @@ async function startGameflowMonitor() {
         case 'InProgress': {
           // Game has started - analyze if we haven't yet (for ranked queues)
           if (!lastAnalyzedPlayers) {
+            // Clear cache for new game
+            if (db?.setLiveSkinSelections) {
+              db.setLiveSkinSelections([], true); // clearFirst=true for new lobby
+              console.log('  [Skin Cache] Cleared for new InProgress game');
+            }
             console.log('=== ANALYZING LOBBY (InProgress - Ranked) ===');
             const lobbyPlayers = await lcuConnector.getLobbyPlayers();
             const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
@@ -1217,6 +1227,11 @@ async function startGameflowMonitor() {
 
           if (!lastAnalyzedPlayers) {
             try {
+              // Clear cache for new game
+              if (db?.setLiveSkinSelections) {
+                db.setLiveSkinSelections([], true); // clearFirst=true for new lobby
+                console.log('  [Skin Cache] Cleared for Reconnect state');
+              }
               const lobbyPlayers = await lcuConnector.getLobbyPlayers();
               const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
               lastAnalyzedPlayers = playerHash;
