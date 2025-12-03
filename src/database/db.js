@@ -3,6 +3,21 @@ const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
 
+function normalizeRiotName(name) {
+  if (!name) return { full: '', game: '' };
+  const cleaned = name.trim().toLowerCase().replace(/\s+/g, '');
+  const [game] = cleaned.split('#');
+  return { full: cleaned, game };
+}
+
+function isConfiguredUser(config, puuid, summonerName) {
+  if (!config) return false;
+  if (config.puuid && puuid && config.puuid === puuid) return true;
+  const playerName = normalizeRiotName(summonerName);
+  const configName = normalizeRiotName(config.summoner_name);
+  return playerName.full === configName.full || playerName.game === configName.game;
+}
+
 class DatabaseManager {
   constructor() {
     // Use userData directory for the database (writable location)
@@ -770,7 +785,10 @@ class DatabaseManager {
       });
     }
 
-    // Enrich with encounter stats
+    const userTeamId =
+      playersBase.find(p => isConfiguredUser(config, p.puuid, p.summonerName))?.teamId || null;
+
+    // Enrich with encounter stats; avoid querying for the configured user
     const players = playersBase.map((p) => {
       let encounterCount = 0;
       let wins = 0;
@@ -784,39 +802,41 @@ class DatabaseManager {
       let byMode = null;
       let gamesTransformed = [];
 
-      try {
-        const history = this.getPlayerHistory(p.summonerName, p.puuid);
-        if (history && history.stats) {
-          encounterCount = history.stats.totalGames || 0;
-          const enemyWins = Number(history.stats.asEnemy?.wins || 0);
-          const allyWins = Number(history.stats.asTeammate?.wins || 0);
-          wins = enemyWins + allyWins;
-          losses = Math.max(encounterCount - wins, 0);
-          winRate = encounterCount > 0 ? Math.round((wins / encounterCount) * 100) : 0;
+      if (!isConfiguredUser(config, p.puuid, p.summonerName)) {
+        try {
+          const history = this.getPlayerHistory(p.summonerName, p.puuid);
+          if (history && history.stats) {
+            encounterCount = history.stats.totalGames || 0;
+            const enemyWins = Number(history.stats.asEnemy?.wins || 0);
+            const allyWins = Number(history.stats.asTeammate?.wins || 0);
+            wins = enemyWins + allyWins;
+            losses = Math.max(encounterCount - wins, 0);
+            winRate = encounterCount > 0 ? Math.round((wins / encounterCount) * 100) : 0;
 
-          asEnemy = history.stats.enhanced.asEnemy;
-          asAlly = history.stats.enhanced.asAlly;
-          lastSeen = history.stats.enhanced.lastSeen;
-          threatLevel = history.stats.enhanced.threatLevel;
-          allyQuality = history.stats.enhanced.allyQuality;
-          byMode = history.stats.enhanced.byMode;
+            asEnemy = history.stats.enhanced.asEnemy;
+            asAlly = history.stats.enhanced.asAlly;
+            lastSeen = history.stats.enhanced.lastSeen;
+            threatLevel = history.stats.enhanced.threatLevel;
+            allyQuality = history.stats.enhanced.allyQuality;
+            byMode = history.stats.enhanced.byMode;
 
-          gamesTransformed = history.games.map(g => ({
-            gameId: g.match_id,
-            champion: g.opponent_champion,
-            role: g.opponent_team_position || g.opponent_lane || null,
-            outcome: g.user_win === 1 ? 'win' : 'loss',
-            kda: {
-              kills: g.opponent_kills,
-              deaths: g.opponent_deaths,
-              assists: g.opponent_assists
-            },
-            timestamp: new Date(g.game_creation),
-            isAlly: g.user_team === g.opponent_team
-          }));
+            gamesTransformed = history.games.map(g => ({
+              gameId: g.match_id,
+              champion: g.opponent_champion,
+              role: g.opponent_team_position || g.opponent_lane || null,
+              outcome: g.user_win === 1 ? 'win' : 'loss',
+              kda: {
+                kills: g.opponent_kills,
+                deaths: g.opponent_deaths,
+                assists: g.opponent_assists
+              },
+              timestamp: new Date(g.game_creation),
+              isAlly: g.user_team === g.opponent_team
+            }));
+          }
+        } catch (err) {
+          // Swallow errors; leave defaults
         }
-      } catch (err) {
-        // Swallow errors; leave defaults
       }
 
       return {
@@ -834,8 +854,6 @@ class DatabaseManager {
         games: gamesTransformed
       };
     });
-
-    const userTeamId = players.find(p => p.puuid === config.puuid)?.teamId || null;
 
     return {
       matchId: match.match_id,

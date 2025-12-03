@@ -262,6 +262,7 @@ export function PlayerChip({
 
   return (
     <Card
+      data-encounters={encounterCount}
       className={cn(
         'transition-all relative overflow-visible',
         isClickable && 'cursor-pointer',
@@ -307,9 +308,6 @@ export function PlayerChip({
                   playerTags.length > 0 ? "text-primary" : "text-muted-foreground"
                 )} />
               </Button>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {encounterCount} {encounterCount === 1 ? 'game' : 'games'}
-              </span>
               {isClickable && (
                 isExpanded ? (
                   <ChevronUp className="h-4 w-4 text-muted-foreground" />

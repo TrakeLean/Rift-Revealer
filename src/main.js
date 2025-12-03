@@ -57,6 +57,21 @@ const QUEUE_NAMES = {
   3140: 'Practice Tool'
 };
 
+function normalizeRiotName(name) {
+  if (!name) return { full: '', game: '' };
+  const cleaned = name.trim().toLowerCase().replace(/\s+/g, '');
+  const [game] = cleaned.split('#');
+  return { full: cleaned, game };
+}
+
+function isCurrentUser(player, config) {
+  if (!player || !config) return false;
+  if (player.puuid && config.puuid && player.puuid === config.puuid) return true;
+  const playerName = normalizeRiotName(player.summonerName);
+  const configName = normalizeRiotName(config.summoner_name);
+  return playerName.full === configName.full || playerName.game === configName.game;
+}
+
 // ======== Skin cache helpers ========
 function getSkinCacheDir() {
   const dir = path.join(app.getPath('userData'), 'skin-cache');
@@ -789,48 +804,49 @@ ipcMain.handle('analyze-lobby', async () => {
 
     const analysis = [];
     for (const player of lobbyPlayers) {
-      // Case-insensitive comparison to avoid missing your own name due to capitalization
-      if (player.summonerName.toLowerCase() !== config.summoner_name.toLowerCase()) {
-        console.log(`Checking history for: ${player.summonerName}`);
-        console.log(`  LCU PUUID: ${player.puuid}`);
-        // Note: Match API and LCU return different PUUID formats, so we must use name matching
-        const history = db.getPlayerHistory(player.summonerName, null);
-        console.log(`  Found ${history.games.length} games`);
-        if (history.games.length > 0 && history.stats) {
-          // Transform games to include isAlly flag
-          const transformedGames = history.games.map(g => ({
-            gameId: g.match_id,
-            champion: g.opponent_champion,
-            role: g.opponent_team_position || g.opponent_lane || null,
-            outcome: g.user_win === 1 ? 'win' : 'loss',
-            kda: {
-              kills: g.opponent_kills,
-              deaths: g.opponent_deaths,
-              assists: g.opponent_assists
-            },
-            timestamp: new Date(g.game_creation),
-            isAlly: g.user_team === g.opponent_team
-          }));
+      if (isCurrentUser(player, config)) {
+        console.log(`Skipping self in analysis: ${player.summonerName}`);
+        continue;
+      }
+      console.log(`Checking history for: ${player.summonerName}`);
+      console.log(`  LCU PUUID: ${player.puuid}`);
+      // Note: Match API and LCU return different PUUID formats, so we must use name matching
+      const history = db.getPlayerHistory(player.summonerName, null);
+      console.log(`  Found ${history.games.length} games`);
+      if (history.games.length > 0 && history.stats) {
+        // Transform games to include isAlly flag
+        const transformedGames = history.games.map(g => ({
+          gameId: g.match_id,
+          champion: g.opponent_champion,
+          role: g.opponent_team_position || g.opponent_lane || null,
+          outcome: g.user_win === 1 ? 'win' : 'loss',
+          kda: {
+            kills: g.opponent_kills,
+            deaths: g.opponent_deaths,
+            assists: g.opponent_assists
+          },
+          timestamp: new Date(g.game_creation),
+          isAlly: g.user_team === g.opponent_team
+        }));
 
-          analysis.push({
-            player: player.summonerName,
-            puuid: player.puuid,
-            source: player.source,
-            encounterCount: history.stats.totalGames,
-            wins: history.stats.asEnemy.wins + history.stats.asTeammate.wins,
-            losses: history.stats.asEnemy.losses + history.stats.asTeammate.losses,
-            winRate: Math.round(((history.stats.asEnemy.wins + history.stats.asTeammate.wins) / history.stats.totalGames) * 100),
-            games: transformedGames,
-            // Enhanced stats
-            asEnemy: history.stats.enhanced.asEnemy,
-            asAlly: history.stats.enhanced.asAlly,
-            lastSeen: history.stats.enhanced.lastSeen,
-            threatLevel: history.stats.enhanced.threatLevel,
-            allyQuality: history.stats.enhanced.allyQuality,
-            byMode: history.stats.enhanced.byMode,
-            profileIconId: history.stats.enhanced.profileIconId
-          });
-        }
+        analysis.push({
+          player: player.summonerName,
+          puuid: player.puuid,
+          source: player.source,
+          encounterCount: history.stats.totalGames,
+          wins: history.stats.asEnemy.wins + history.stats.asTeammate.wins,
+          losses: history.stats.asEnemy.losses + history.stats.asTeammate.losses,
+          winRate: Math.round(((history.stats.asEnemy.wins + history.stats.asTeammate.wins) / history.stats.totalGames) * 100),
+          games: transformedGames,
+          // Enhanced stats
+          asEnemy: history.stats.enhanced.asEnemy,
+          asAlly: history.stats.enhanced.asAlly,
+          lastSeen: history.stats.enhanced.lastSeen,
+          threatLevel: history.stats.enhanced.threatLevel,
+          allyQuality: history.stats.enhanced.allyQuality,
+          byMode: history.stats.enhanced.byMode,
+          profileIconId: history.stats.enhanced.profileIconId
+        });
       }
     }
 
@@ -866,61 +882,62 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
   const analysis = [];
 
   for (const player of lobbyPlayers) {
-    // Case-insensitive comparison to avoid missing your own name due to capitalization
-    if (player.summonerName.toLowerCase() !== config.summoner_name.toLowerCase()) {
-      console.log(`Checking history for: ${player.summonerName}`);
-      // Prefer PUUID (more reliable) and fall back to name matching
-      const history = db.getPlayerHistory(player.summonerName, player.puuid || null);
-      console.log(`  Found ${history.games.length} games`);
-      // Persist latest cosmetics
-      try {
-        db.savePlayer(
-          player.puuid,
-          player.summonerName,
-          config.region,
-          player.profileIconId || null
-        );
-      } catch (err) {
-        console.log('Warning: failed to save player cosmetic info:', err.message);
-      }
-      if (history.games.length > 0 && history.stats) {
-        // Transform games to include isAlly flag
-        const transformedGames = history.games.map(g => ({
-          gameId: g.match_id,
-          champion: g.opponent_champion,
-          role: g.opponent_team_position || g.opponent_lane || null,
-          outcome: g.user_win === 1 ? 'win' : 'loss',
-          kda: {
-            kills: g.opponent_kills,
-            deaths: g.opponent_deaths,
-            assists: g.opponent_assists
-          },
-          timestamp: new Date(g.game_creation),
-          isAlly: g.user_team === g.opponent_team
-        }));
+    if (isCurrentUser(player, config)) {
+      console.log(`Skipping self in background analysis: ${player.summonerName}`);
+      continue;
+    }
+    console.log(`Checking history for: ${player.summonerName}`);
+    // Prefer PUUID (more reliable) and fall back to name matching
+    const history = db.getPlayerHistory(player.summonerName, player.puuid || null);
+    console.log(`  Found ${history.games.length} games`);
+    // Persist latest cosmetics
+    try {
+      db.savePlayer(
+        player.puuid,
+        player.summonerName,
+        config.region,
+        player.profileIconId || null
+      );
+    } catch (err) {
+      console.log('Warning: failed to save player cosmetic info:', err.message);
+    }
+    if (history.games.length > 0 && history.stats) {
+      // Transform games to include isAlly flag
+      const transformedGames = history.games.map(g => ({
+        gameId: g.match_id,
+        champion: g.opponent_champion,
+        role: g.opponent_team_position || g.opponent_lane || null,
+        outcome: g.user_win === 1 ? 'win' : 'loss',
+        kda: {
+          kills: g.opponent_kills,
+          deaths: g.opponent_deaths,
+          assists: g.opponent_assists
+        },
+        timestamp: new Date(g.game_creation),
+        isAlly: g.user_team === g.opponent_team
+      }));
 
-        analysis.push({
-          player: player.summonerName,
-          puuid: player.puuid,
-          source: player.source,
-          encounterCount: history.stats.totalGames,
-          wins: history.stats.asEnemy.wins + history.stats.asTeammate.wins,
-          losses: history.stats.asEnemy.losses + history.stats.asTeammate.losses,
-          winRate: Math.round(((history.stats.asEnemy.wins + history.stats.asTeammate.wins) / history.stats.totalGames) * 100),
-          games: transformedGames,
-          // Enhanced stats
-          asEnemy: history.stats.enhanced.asEnemy,
-          asAlly: history.stats.enhanced.asAlly,
-          lastSeen: history.stats.enhanced.lastSeen,
-          threatLevel: history.stats.enhanced.threatLevel,
-          allyQuality: history.stats.enhanced.allyQuality,
-          byMode: history.stats.enhanced.byMode,  // Add mode-specific stats
-          profileIconId: player.profileIconId || history.stats.enhanced.profileIconId,  // Prefer live icon
-          skinId: player.skinId || null,
-          championId: player.championId || null,
-          championName: player.championName || null
-        });
-      }
+      analysis.push({
+        player: player.summonerName,
+        puuid: player.puuid,
+        source: player.source,
+        encounterCount: history.stats.totalGames,
+        wins: history.stats.asEnemy.wins + history.stats.asTeammate.wins,
+        losses: history.stats.asEnemy.losses + history.stats.asTeammate.losses,
+        winRate: Math.round(((history.stats.asEnemy.wins + history.stats.asTeammate.wins) / history.stats.totalGames) * 100),
+        games: transformedGames,
+        // Enhanced stats
+        asEnemy: history.stats.enhanced.asEnemy,
+        asAlly: history.stats.enhanced.asAlly,
+        lastSeen: history.stats.enhanced.lastSeen,
+        threatLevel: history.stats.enhanced.threatLevel,
+        allyQuality: history.stats.enhanced.allyQuality,
+        byMode: history.stats.enhanced.byMode,  // Add mode-specific stats
+        profileIconId: player.profileIconId || history.stats.enhanced.profileIconId,  // Prefer live icon
+        skinId: player.skinId || null,
+        championId: player.championId || null,
+        championName: player.championName || null
+      });
     }
   }
 
