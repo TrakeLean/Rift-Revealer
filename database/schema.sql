@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS players (
     summoner_name TEXT NOT NULL,
     region TEXT NOT NULL,
     last_seen INTEGER,
-    profile_icon_id INTEGER
+    profile_icon_id INTEGER,
+    last_skin_id INTEGER
 );
 
 -- Matches table
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS match_participants (
     summoner_name TEXT,
     champion_name TEXT,
     champion_id INTEGER,
+    skin_id INTEGER,
     team_id INTEGER,
     kills INTEGER,
     deaths INTEGER,

@@ -29,10 +29,12 @@ export function Settings({ onConfigSaved }: SettingsProps) {
   const [importCancelled, setImportCancelled] = useState(false)
   const [isClearingCache, setIsClearingCache] = useState(false)
   const [clearCacheStatus, setClearCacheStatus] = useState<string | null>(null)
+  const [skinCacheInfo, setSkinCacheInfo] = useState<{ files: number; bytes: number } | null>(null)
 
   useEffect(() => {
     loadConfig()
     loadAutoStart()
+    loadSkinCacheInfo()
 
     const cleanupProgress = window.api.onImportProgress((progressData) => {
       if (!importCancelled) {
@@ -162,6 +164,7 @@ export function Settings({ onConfigSaved }: SettingsProps) {
       if (result?.success) {
         const count = result.removed ?? 0
         setClearCacheStatus(`Cleared ${count} cached skin${count === 1 ? '' : 's'}.`)
+        await loadSkinCacheInfo()
       } else {
         setClearCacheStatus(result?.error || 'Failed to clear cache')
       }
@@ -205,6 +208,25 @@ export function Settings({ onConfigSaved }: SettingsProps) {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const loadSkinCacheInfo = async () => {
+    try {
+      const res = await window.api.getSkinCacheInfo()
+      if (res?.success) {
+        setSkinCacheInfo({ files: res.files || 0, bytes: res.bytes || 0 })
+      }
+    } catch (error) {
+      console.error('Failed to load skin cache info:', error)
+    }
+  }
+
+  const formatBytes = (bytes: number) => {
+    if (bytes <= 0 || Number.isNaN(bytes)) return '0 B'
+    const units = ['B', 'KB', 'MB', 'GB']
+    const idx = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
+    const value = bytes / Math.pow(1024, idx)
+    return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
   }
 
   const regions = [
@@ -470,7 +492,9 @@ export function Settings({ onConfigSaved }: SettingsProps) {
               <ul className="text-xs text-muted-foreground space-y-1">
                 <li>• Fetches your recent matches from Riot API (up to 100).</li>
                 <li>• Stores encountered players to improve lobby detection.</li>
+                <li>• Respects Riot rate limits with built-in backoff on 429s.</li>
                 <li>• Run periodically to keep your encounter history fresh.</li>
+                <li>• Live games auto-import while the app is open; manual import is for catching up.</li>
               </ul>
             </CardContent>
           </Card>
@@ -478,7 +502,7 @@ export function Settings({ onConfigSaved }: SettingsProps) {
           <div className="flex items-start gap-2 p-3 rounded-md bg-blue-950/30 text-blue-400 border border-blue-900/50">
             <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <div className="text-xs">
-              <strong>Import Time:</strong> Importing 100 matches can take ~10-15 seconds due to rate limiting. Progress updates in real time.
+              <strong>Import Time:</strong> Importing 100 matches can take ~60-90 seconds due to Riot rate limits and backoff on 429s. Progress updates in real time.
             </div>
           </div>
         </CardContent>
@@ -512,6 +536,11 @@ export function Settings({ onConfigSaved }: SettingsProps) {
             </Button>
             {clearCacheStatus && (
               <span className="text-sm text-muted-foreground">{clearCacheStatus}</span>
+            )}
+            {skinCacheInfo && (
+              <span className="text-xs text-muted-foreground">
+                Cache size: {formatBytes(skinCacheInfo.bytes)} ({skinCacheInfo.files} file{skinCacheInfo.files === 1 ? '' : 's'})
+              </span>
             )}
           </div>
         </CardContent>

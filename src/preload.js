@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   getSkinImage: (skinId, championId) => ipcRenderer.invoke('get-skin-image', skinId, championId),
   getChampionTile: (championId) => ipcRenderer.invoke('get-champion-tile', championId),
   clearSkinCache: () => ipcRenderer.invoke('clear-skin-cache'),
+  getSkinCacheInfo: () => ipcRenderer.invoke('get-skin-cache-info'),
   getLobbyPlayers: () => ipcRenderer.invoke('get-lobby-players'),
   getPlayerHistory: (summonerName) => ipcRenderer.invoke('get-player-history', summonerName),
   analyzeLobby: () => ipcRenderer.invoke('analyze-lobby'),

@@ -99,13 +99,19 @@ export function LobbyAnalysis() {
       TOP: 0,
       JUNGLE: 1,
       JG: 1,
+      JUNG: 1,
       MIDDLE: 2,
       MID: 2,
+      MIDL: 2,
       BOTTOM: 3,
+      BOT: 3,
       ADC: 3,
       DUO_CARRY: 3,
+      DUO: 3,
       UTILITY: 4,
-      SUPPORT: 4
+      SUPPORT: 4,
+      SUP: 4,
+      DUO_SUPPORT: 4
     }
     return orderMap[rawRole] ?? 99
   }
@@ -116,13 +122,18 @@ export function LobbyAnalysis() {
       TOP: 'Top',
       JUNGLE: 'Jungle',
       JG: 'Jungle',
+      JUNG: 'Jungle',
       MIDDLE: 'Mid',
       MID: 'Mid',
+      MIDL: 'Mid',
       BOTTOM: 'ADC',
+      BOT: 'ADC',
       ADC: 'ADC',
       DUO_CARRY: 'ADC',
       UTILITY: 'Support',
-      SUPPORT: 'Support'
+      SUPPORT: 'Support',
+      SUP: 'Support',
+      DUO_SUPPORT: 'Support'
     }
     return roleLabelMap[rawRole] || null
   }
@@ -559,64 +570,70 @@ export function LobbyAnalysis() {
             <CardContent>
               {detectedPlayers.length > 0 ? (
                 <div className="space-y-3">
-                  {detectedPlayers.map((player) => (
-                    <div key={player.player} className="space-y-3">
-                      <PlayerChip
-                        puuid={player.puuid}
-                        summonerName={player.player}
-                        encounterCount={player.encounterCount}
-                        wins={player.wins}
-                        losses={player.losses}
-                        tags={player.tags}
-                        asEnemy={player.asEnemy}
-                        asAlly={player.asAlly}
-                        lastSeen={player.lastSeen}
-                        threatLevel={player.threatLevel}
-                        allyQuality={player.allyQuality}
-                        byMode={player.byMode}
-                      profileIconId={player.profileIconId}
-                      skinId={player.skinId}
-                      onClick={() => togglePlayerExpansion(player.player)}
-                    />
+                  {detectedPlayers.map((player) => {
+                    const hasDetails = Boolean(player.asEnemy || player.asAlly || (player.games && player.games.length > 0));
+                    const isSelected = expandedPlayer === player.player;
+                    return (
+                      <div key={player.player} className="space-y-2">
+                        <PlayerChip
+                          puuid={player.puuid}
+                          summonerName={player.player}
+                          encounterCount={player.encounterCount}
+                          wins={player.wins}
+                          losses={player.losses}
+                          tags={player.tags}
+                          asEnemy={player.asEnemy}
+                          asAlly={player.asAlly}
+                          lastSeen={player.lastSeen}
+                          threatLevel={player.threatLevel}
+                          allyQuality={player.allyQuality}
+                          byMode={player.byMode}
+                          profileIconId={player.profileIconId ?? undefined}
+                          skinId={player.skinId ?? undefined}
+                          championName={player.championName ?? undefined}
+                          championId={player.championId ?? undefined}
+                          onClick={hasDetails ? () => togglePlayerExpansion(player.player) : undefined}
+                          isExpanded={isSelected}
+                          className={cn("h-full", isSelected && "ring-1 ring-primary/60")}
+                        />
 
-                      {/* Expanded Stats Panel */}
-                      {expandedPlayer === player.player && (
-                        <div className="ml-4 space-y-3">
-                          {/* Detailed Stats */}
-                          <StatsPanel
-                            asEnemy={player.asEnemy}
-                            asAlly={player.asAlly}
-                          />
-
-                          {/* Recent Match History */}
-                          {player.games.length > 0 && (
-                            <div className="space-y-2">
-                              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                                Recent Games
-                              </p>
+                        {isSelected && (
+                          <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
+                            {(player.asEnemy || player.asAlly) && (
+                              <StatsPanel
+                                asEnemy={player.asEnemy}
+                                asAlly={player.asAlly}
+                              />
+                            )}
+                            {player.games && player.games.length > 0 && (
                               <div className="space-y-2">
-                                {player.games.slice(0, 5).map((match, idx) => (
-                                  <MatchCard
-                                    key={idx}
-                                    gameId={match.gameId}
-                                    champion={match.champion}
-                                    outcome={match.outcome}
-                                    kda={match.kda}
-                                    timestamp={new Date(match.timestamp)}
-                                  />
-                                ))}
-                                {player.games.length > 5 && (
-                                  <p className="text-xs text-muted-foreground text-center py-2">
-                                    + {player.games.length - 5} more games
-                                  </p>
-                                )}
+                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                                  Recent Games
+                                </p>
+                                <div className="space-y-2">
+                                  {player.games.slice(0, 5).map((match, idx2) => (
+                                    <MatchCard
+                                      key={idx2}
+                                      gameId={match.gameId}
+                                      champion={match.champion}
+                                      outcome={match.outcome}
+                                      kda={match.kda}
+                                      timestamp={new Date(match.timestamp)}
+                                    />
+                                  ))}
+                                  {player.games.length > 5 && (
+                                    <p className="text-xs text-muted-foreground text-center py-2">
+                                      + {player.games.length - 5} more games
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center text-muted-foreground py-12">

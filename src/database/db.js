@@ -37,6 +37,9 @@ class DatabaseManager {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
     console.log('Database opened successfully');
+
+    // In-memory cache of live skin selections (puuid -> { skinId, championId })
+    this.liveSkinSelections = new Map();
   }
 
   initialize() {
@@ -53,6 +56,15 @@ class DatabaseManager {
   }
 
   runMigrations() {
+    const ensureColumn = (table, column, definition) => {
+      const info = this.db.prepare(`PRAGMA table_info(${table})`).all();
+      const exists = info.some(col => col.name === column);
+      if (!exists) {
+        console.log(`Running migration: Adding ${column} to ${table}`);
+        this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+      }
+    };
+
     // Disable foreign keys during destructive migrations to avoid intermediate violations
     this.db.exec('PRAGMA foreign_keys = OFF');
     try {
@@ -141,10 +153,39 @@ class DatabaseManager {
       this.db.exec('ALTER TABLE players_new RENAME TO players');
     }
 
-    // Migrate match_participants to drop unused columns
+    // Rebuild players table if legacy last_skin_id column exists
+    const playersInfoLatest = this.db.prepare("PRAGMA table_info(players)").all();
+    const hasLastSkin = playersInfoLatest.some(col => col.name === 'last_skin_id');
+    if (hasLastSkin) {
+      console.log('Running migration: Rebuilding players table without last_skin_id');
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS players_new (
+          puuid TEXT PRIMARY KEY,
+          summoner_name TEXT NOT NULL,
+          region TEXT NOT NULL,
+          last_seen INTEGER,
+          profile_icon_id INTEGER
+        )
+      `);
+      this.db.exec(`
+        INSERT OR IGNORE INTO players_new (puuid, summoner_name, region, last_seen, profile_icon_id)
+        SELECT puuid, summoner_name, region, last_seen, profile_icon_id FROM players
+      `);
+      this.db.exec('DROP TABLE players');
+      this.db.exec('ALTER TABLE players_new RENAME TO players');
+    }
+
+    // Migrate match_participants to drop unused columns and add skin_id
     const participantsInfo = this.db.prepare("PRAGMA table_info(match_participants)").all();
     const removedCols = ['profile_icon_id', 'role', 'team_position', 'gold_earned', 'total_minions_killed', 'total_damage_to_champions'];
     const needsParticipantMigration = participantsInfo.some(col => removedCols.includes(col.name));
+    const hasSkinId = participantsInfo.some(col => col.name === 'skin_id');
+    if (!hasSkinId) {
+      console.log('Running migration: Adding skin_id to match_participants');
+      this.db.exec(`ALTER TABLE match_participants ADD COLUMN skin_id INTEGER`);
+    }
+    // Ensure column remains if above failed previously
+    ensureColumn('match_participants', 'skin_id', 'INTEGER');
     if (needsParticipantMigration) {
       console.log('Running migration: Rebuilding match_participants without unused columns');
       this.db.exec(`
@@ -155,6 +196,7 @@ class DatabaseManager {
           summoner_name TEXT,
           champion_name TEXT,
           champion_id INTEGER,
+          skin_id INTEGER,
           team_id INTEGER,
           kills INTEGER,
           deaths INTEGER,
@@ -167,11 +209,11 @@ class DatabaseManager {
       `);
       this.db.exec(`
         INSERT INTO match_participants_new (
-          match_id, puuid, summoner_name, champion_name, champion_id, team_id,
+          match_id, puuid, summoner_name, champion_name, champion_id, skin_id, team_id,
           kills, deaths, assists, win, lane
         )
         SELECT
-          match_id, puuid, summoner_name, champion_name, champion_id, team_id,
+          match_id, puuid, summoner_name, champion_name, champion_id, NULL as skin_id, team_id,
           kills, deaths, assists, win, lane
         FROM match_participants
       `);
@@ -231,10 +273,31 @@ class DatabaseManager {
 
   savePlayer(puuid, summonerName, region, profileIconId = null) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO players (puuid, summoner_name, region, last_seen, profile_icon_id)
+      INSERT INTO players (puuid, summoner_name, region, last_seen, profile_icon_id)
       VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(puuid) DO UPDATE SET
+        summoner_name = excluded.summoner_name,
+        region = excluded.region,
+        last_seen = excluded.last_seen,
+        profile_icon_id = excluded.profile_icon_id
     `);
     return stmt.run(puuid, summonerName, region, Date.now(), profileIconId);
+  }
+
+  setLiveSkinSelections(players = []) {
+    try {
+      this.liveSkinSelections.clear();
+      players.forEach((p) => {
+        if (p && p.puuid && p.skinId !== undefined && p.skinId !== null) {
+          this.liveSkinSelections.set(p.puuid, {
+            skinId: p.skinId,
+            championId: p.championId ?? null
+          });
+        }
+      });
+    } catch (err) {
+      console.warn('Failed to cache live skin selections:', err.message);
+    }
   }
 
   saveMatch(matchData) {
@@ -265,9 +328,9 @@ class DatabaseManager {
 
     const participantStmt = this.db.prepare(`
       INSERT INTO match_participants (
-        match_id, puuid, summoner_name, champion_name, champion_id, team_id,
+        match_id, puuid, summoner_name, champion_name, champion_id, skin_id, team_id,
         kills, deaths, assists, win, lane
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const participant of matchData.info.participants) {
@@ -301,18 +364,36 @@ class DatabaseManager {
       const profileIconId = participant.profileIconId ?? participant.profileIcon ?? null; // Riot match API uses profileIcon
       this.savePlayer(participant.puuid, summonerName, matchData.info.platformId, profileIconId);
 
+      // Prefer Riot's role fields in this order to better reflect the role queued: teamPosition -> individualPosition -> role -> lane
+      const lane =
+        (participant.teamPosition ||
+          participant.individualPosition ||
+          participant.role ||
+          participant.lane ||
+          '')
+          .toString()
+          .toUpperCase()
+          .trim() || null;
+
+      // Prefer live skin selection (captured from champ select / gameflow) when match data lacks skin info
+      const liveSkin = this.liveSkinSelections.get(participant.puuid);
+      const resolvedSkinId =
+        participant.skinId ??
+        (liveSkin && (liveSkin.championId === null || liveSkin.championId === participant.championId) ? liveSkin.skinId : null);
+
       participantStmt.run(
         matchData.metadata.matchId,
         participant.puuid,
         summonerName,
         participant.championName,
         participant.championId,
+        resolvedSkinId ?? null,
         participant.teamId,
         participant.kills,
         participant.deaths,
         participant.assists,
         participant.win ? 1 : 0,
-        participant.lane
+        lane
       );
     }
   }
@@ -749,6 +830,7 @@ class DatabaseManager {
         mp.summoner_name,
         mp.champion_name,
         mp.champion_id,
+        mp.skin_id,
         mp.team_id,
         mp.lane,
         mp.win,
@@ -781,7 +863,7 @@ class DatabaseManager {
         teamPosition: p.lane,
         profileIconId: p.profile_icon_id,
         win: p.win === 1,
-        skinId: null
+        skinId: p.skin_id ?? null
       });
     }
 

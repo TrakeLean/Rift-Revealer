@@ -1,9 +1,11 @@
+import { ReactNode } from 'react'
 import { Swords, Users, Zap, Trophy, Gamepad2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { GameMode, ModeStats } from '../types'
 
 interface ModeStatsRowProps {
   byMode?: Record<GameMode, ModeStats>
+  children?: ReactNode
 }
 
 const MODE_CONFIG: Record<GameMode, { icon: typeof Swords; color: string; label: string }> = {
@@ -17,35 +19,23 @@ const MODE_CONFIG: Record<GameMode, { icon: typeof Swords; color: string; label:
     color: 'text-blue-400',
     label: 'Normal'
   },
-  ARAM: {
-    icon: Zap,
-    color: 'text-purple-400',
-    label: 'ARAM'
-  },
-  Arena: {
-    icon: Swords,
-    color: 'text-orange-400',
-    label: 'Arena'
-  },
-  Other: {
-    icon: Gamepad2,
-    color: 'text-slate-400',
-    label: 'Other'
-  }
+  ARAM: { icon: Zap, color: 'text-purple-400', label: 'ARAM' },
+  Arena: { icon: Swords, color: 'text-orange-400', label: 'Arena' },
+  Other: { icon: Gamepad2, color: 'text-slate-400', label: 'Other' }
 }
 
-export function ModeStatsRow({ byMode }: ModeStatsRowProps) {
-  if (!byMode) return null
+export function ModeStatsRow({ byMode, children }: ModeStatsRowProps) {
+  if (!byMode && !children) return null
 
   // Filter out modes with no games
-  const modesWithGames = Object.entries(byMode).filter(
-    ([_, stats]) => stats.asEnemy || stats.asAlly
-  )
+  const modesWithGames = byMode
+    ? Object.entries(byMode).filter(([_, stats]) => stats.asEnemy || stats.asAlly)
+    : []
 
-  if (modesWithGames.length === 0) return null
+  if (modesWithGames.length === 0 && !children) return null
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2 items-center">
       {modesWithGames.map(([mode, stats]) => {
         const config = MODE_CONFIG[mode as GameMode]
         const Icon = config.icon
@@ -91,6 +81,7 @@ export function ModeStatsRow({ byMode }: ModeStatsRowProps) {
           </div>
         )
       })}
+      {children}
     </div>
   )
 }

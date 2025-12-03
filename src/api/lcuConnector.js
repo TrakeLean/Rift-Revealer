@@ -137,6 +137,15 @@ class LCUConnector {
   }
 
   async getLobbyPlayers() {
+    // Fetch gameflow session once to derive selectedSkinIndex mapping
+    const gameflowSession = await this.getGameflowSession().catch(() => null);
+    const selectionMap = new Map();
+    for (const sel of gameflowSession?.gameData?.playerChampionSelections || []) {
+      if (sel.puuid !== undefined && sel.puuid !== null) {
+        selectionMap.set(sel.puuid, sel.selectedSkinIndex);
+      }
+    }
+
     // Try champion select first
     const champSelect = await this.getChampSelect();
 
@@ -152,8 +161,19 @@ class LCUConnector {
             if (summoner.gameName && summoner.tagLine) {
               summonerName = `${summoner.gameName}#${summoner.tagLine}`;
             } else if (summoner.displayName) {
-              summonerName = summoner.displayName;
-            }
+            summonerName = summoner.displayName;
+          }
+
+          const selectedSkinIndex = selectionMap.get(summoner.puuid);
+          let skinId = null;
+          if (
+            selectedSkinIndex !== undefined &&
+            selectedSkinIndex !== null &&
+            team.championId !== undefined &&
+            team.championId !== null
+          ) {
+            skinId = team.championId * 1000 + selectedSkinIndex;
+          }
 
         players.push({
           summonerId: team.summonerId,
@@ -162,7 +182,7 @@ class LCUConnector {
           championId: team.championId,
           cellId: team.cellId,
           profileIconId: summoner.profileIconId || null,
-          skinId: team.selectedSkinId || team.skinId || null,
+          skinId,
           source: 'championSelect'
         });
       }
@@ -173,18 +193,10 @@ class LCUConnector {
     }
 
     // If not in champion select, try active game
-    const gameSession = await this.getGameflowSession();
+    const gameSession = gameflowSession || await this.getGameflowSession();
 
     if (gameSession && gameSession.gameData && gameSession.gameData.teamOne) {
       const players = [];
-
-      // Map selected skin indexes by PUUID (available during/after champ select)
-      const selectionMap = new Map();
-      for (const sel of gameSession.gameData.playerChampionSelections || []) {
-        if (sel.puuid !== undefined && sel.puuid !== null) {
-          selectionMap.set(sel.puuid, sel.selectedSkinIndex);
-        }
-      }
 
       const allPlayers = [
         ...(gameSession.gameData.teamOne || []),
@@ -205,10 +217,15 @@ class LCUConnector {
           }
         }
 
-        // Derive skinId from selection index when skinId is missing
-        let skinId = player.skinId || null;
+        // Derive skinId strictly from selectedSkinIndex
         const selectedSkinIndex = selectionMap.get(player.puuid);
-        if ((skinId === null || skinId === undefined) && selectedSkinIndex !== undefined && selectedSkinIndex !== null && player.championId !== undefined && player.championId !== null) {
+        let skinId = null;
+        if (
+          selectedSkinIndex !== undefined &&
+          selectedSkinIndex !== null &&
+          player.championId !== undefined &&
+          player.championId !== null
+        ) {
           skinId = player.championId * 1000 + selectedSkinIndex;
         }
 
