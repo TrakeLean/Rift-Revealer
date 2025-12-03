@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS match_participants (
     win INTEGER,
     lane TEXT,
     FOREIGN KEY (match_id) REFERENCES matches(match_id),
-    FOREIGN KEY (puuid) REFERENCES players(puuid)
+    FOREIGN KEY (puuid) REFERENCES players(puuid),
+    UNIQUE(match_id, puuid)
 );
 
 -- Player tags/notes table

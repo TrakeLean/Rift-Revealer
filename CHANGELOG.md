@@ -5,12 +5,16 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased (1.6.0)] - BREAKING CHANGE
+## [1.6.0] - 2025-12-03 - BREAKING CHANGE
 
 ### ⚠️ BREAKING CHANGES
 - **Database schema refactored**: `summoner_name` field split into `username` + `tag_line` across all tables
 - **Existing database incompatible**: Users must delete `~/AppData/Roaming/rift-revealer/database/` folder and re-import match history
 - **Settings UI updated**: Now requires separate inputs for username and tag (e.g., "YourName" + "NA1" instead of "YourName#NA1")
+
+### Added
+- Enhanced logging for lobby player analysis to help debug detection issues
+- Unique constraint on `(match_id, puuid)` in `match_participants` table to prevent duplicate imports
 
 ### Changed
 - Database now stores Riot IDs as separate `username` and `tag_line` fields, aligning with Riot API format
@@ -21,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Created helper functions `formatRiotId(username, tagLine)` and `parseRiotId(fullName)` for consistent formatting
 - Updated TypeScript interfaces across all components (`UserConfig`, `AnalysisResult`, `RosterPlayer`, etc.)
 - Improved name matching logic with normalized case-insensitive comparison
+
+### Fixed
+- Skin/champion cache now clears properly when entering ChampSelect, InProgress, or Reconnect states
+- Players no longer show with wrong champion names from previous games (e.g., Braum when playing Nautilus)
+- SQL template literal quote escaping fixed in database queries
+- Duplicate match participant entries prevented by unique constraint
 
 ### Technical Details
 - **Files Updated**: schema.sql, db.js (970 lines rewritten), riotApi.js, lcuConnector.js, main.js, preload.js, types/index.ts

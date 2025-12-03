@@ -106,6 +106,69 @@ class DatabaseManager {
       `);
     }
 
+    // Add unique constraint on (match_id, puuid) to prevent duplicate imports
+    const hasUniqueConstraint = this.db.prepare(`
+      SELECT sql FROM sqlite_master
+      WHERE type='table' AND name='match_participants'
+      AND sql LIKE '%UNIQUE%match_id%puuid%'
+    `).get();
+
+    if (!hasUniqueConstraint) {
+      console.log('Running migration: Adding unique constraint to match_participants');
+      console.log('  This will remove duplicate entries...');
+
+      // SQLite doesn't support adding constraints to existing tables, so we need to recreate it
+      this.db.exec('PRAGMA foreign_keys=OFF');
+
+      this.db.exec(`
+        BEGIN TRANSACTION;
+
+        -- Create new table with unique constraint
+        CREATE TABLE match_participants_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          match_id TEXT NOT NULL,
+          puuid TEXT NOT NULL,
+          username TEXT,
+          tag_line TEXT,
+          champion_name TEXT,
+          champion_id INTEGER,
+          skin_id INTEGER,
+          team_id INTEGER,
+          kills INTEGER,
+          deaths INTEGER,
+          assists INTEGER,
+          win INTEGER,
+          lane TEXT,
+          FOREIGN KEY (match_id) REFERENCES matches(match_id),
+          FOREIGN KEY (puuid) REFERENCES players(puuid),
+          UNIQUE(match_id, puuid)
+        );
+
+        -- Copy data, removing duplicates (keep the first occurrence)
+        INSERT INTO match_participants_new (
+          match_id, puuid, username, tag_line, champion_name, champion_id,
+          skin_id, team_id, kills, deaths, assists, win, lane
+        )
+        SELECT DISTINCT match_id, puuid, username, tag_line, champion_name, champion_id,
+          skin_id, team_id, kills, deaths, assists, win, lane
+        FROM match_participants
+        GROUP BY match_id, puuid;
+
+        -- Drop old table and rename new one
+        DROP TABLE match_participants;
+        ALTER TABLE match_participants_new RENAME TO match_participants;
+
+        -- Recreate indexes
+        CREATE INDEX idx_participants_match ON match_participants(match_id);
+        CREATE INDEX idx_participants_puuid ON match_participants(puuid);
+
+        COMMIT;
+      `);
+
+      this.db.exec('PRAGMA foreign_keys=ON');
+      console.log('  Migration complete: duplicates removed, unique constraint added');
+    }
+
     console.log('Database migrations completed');
   }
 
@@ -407,7 +470,6 @@ class DatabaseManager {
         INNER JOIN match_participants opponent ON m.match_id = opponent.match_id
           AND opponent.puuid = ?
           AND opponent.puuid != ?
-        WHERE m.game_creation < (strftime('%s', 'now') - 1800) * 1000
         ORDER BY m.game_creation DESC
       `);
 
@@ -458,7 +520,6 @@ class DatabaseManager {
             ${tagLine ? "AND LOWER(REPLACE(opponent.tag_line, ' ', '')) = ?" : ''}
           )
           AND opponent.puuid != ?
-        WHERE m.game_creation < (strftime('%s', 'now') - 1800) * 1000
         ORDER BY m.game_creation DESC
       `);
 
