@@ -1,6 +1,7 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { parseRiotId } = require('../database/db');
 
 class LCUConnector {
   constructor() {
@@ -8,6 +9,11 @@ class LCUConnector {
     this.httpsAgent = new https.Agent({
       rejectUnauthorized: false
     });
+    this.nameCache = {
+      puuid: new Map(),
+      summonerId: new Map(),
+      cellId: new Map()
+    };
   }
 
   findLeagueClientCredentials() {
@@ -140,6 +146,61 @@ class LCUConnector {
     // Fetch gameflow session once to derive selectedSkinIndex mapping
     const gameflowSession = await this.getGameflowSession().catch(() => null);
     const selectionMap = new Map();
+    const isNumber = (val) => typeof val === 'number' && !Number.isNaN(val);
+    const nameCache = this.nameCache || { puuid: new Map(), summonerId: new Map(), cellId: new Map() };
+
+    const nameFromCache = (player, summoner) => {
+      if (summoner?.puuid && nameCache.puuid.has(summoner.puuid)) return nameCache.puuid.get(summoner.puuid);
+      if (player?.puuid && nameCache.puuid.has(player.puuid)) return nameCache.puuid.get(player.puuid);
+      if (player?.summonerId && nameCache.summonerId.has(player.summonerId)) return nameCache.summonerId.get(player.summonerId);
+      if (player?.cellId !== undefined && nameCache.cellId.has(player.cellId)) return nameCache.cellId.get(player.cellId);
+      return null;
+    };
+
+    const rememberName = (name, player, summoner) => {
+      if (!name) return;
+      if (summoner?.puuid) nameCache.puuid.set(summoner.puuid, name);
+      if (player?.puuid) nameCache.puuid.set(player.puuid, name);
+      if (player?.summonerId) nameCache.summonerId.set(player.summonerId, name);
+      if (player?.cellId !== undefined) nameCache.cellId.set(player.cellId, name);
+    };
+
+    const resolveName = (player, summoner) => {
+      const candidates = [];
+      if (summoner?.gameName && summoner?.tagLine) candidates.push(`${summoner.gameName}#${summoner.tagLine}`);
+      if (player?.riotIdGameName && player?.riotIdTagline) candidates.push(`${player.riotIdGameName}#${player.riotIdTagline}`);
+      if (player?.gameName && player?.tagLine) candidates.push(`${player.gameName}#${player.tagLine}`);
+      if (player?.displayName) candidates.push(player.displayName);
+      if (player?.summonerName) candidates.push(player.summonerName);
+      if (player?.summonerInternalName) candidates.push(player.summonerInternalName);
+      if (player?.obfuscatedSummonerName) candidates.push(player.obfuscatedSummonerName);
+      if (player?.alias) candidates.push(player.alias);
+
+      const cached = nameFromCache(player, summoner);
+      if (cached) candidates.push(cached);
+
+      if (player?.puuid) candidates.push(player.puuid);
+      if (summoner?.puuid) candidates.push(summoner.puuid);
+
+      const name = candidates.find(n => typeof n === 'string' && n.trim().length > 0) || 'Unknown';
+      rememberName(name, player, summoner);
+      return name;
+    };
+
+    const deriveSkinId = (player) => {
+      // Prefer explicit skin id if provided by LCU
+      if (isNumber(player.selectedSkinId)) return player.selectedSkinId;
+      if (isNumber(player.skinId)) return player.skinId;
+
+      // Fall back to selectedSkinIndex * 1000 scheme
+      const mappedIndex = player.puuid ? selectionMap.get(player.puuid) : undefined;
+      const selectedIndex = isNumber(player.selectedSkinIndex) ? player.selectedSkinIndex : mappedIndex;
+      if (isNumber(selectedIndex) && isNumber(player.championId)) {
+        return player.championId * 1000 + selectedIndex;
+      }
+      return null;
+    };
+
     for (const sel of gameflowSession?.gameData?.playerChampionSelections || []) {
       if (sel.puuid !== undefined && sel.puuid !== null) {
         selectionMap.set(sel.puuid, sel.selectedSkinIndex);
@@ -149,44 +210,45 @@ class LCUConnector {
     // Try champion select first
     const champSelect = await this.getChampSelect();
 
-    if (champSelect && champSelect.myTeam) {
+    if (champSelect && (champSelect.myTeam || champSelect.theirTeam)) {
       const players = [];
+      const allTeams = [...(champSelect.myTeam || []), ...(champSelect.theirTeam || [])];
 
-      for (const team of champSelect.myTeam || []) {
-        if (team.summonerId) {
-          const summoner = await this.makeRequest(`/lol-summoner/v1/summoners/${team.summonerId}`);
-          if (summoner) {
-            // Use gameName#tagLine format for Riot ID (post-2023 system)
-            let summonerName = 'Unknown';
-            if (summoner.gameName && summoner.tagLine) {
-              summonerName = `${summoner.gameName}#${summoner.tagLine}`;
-            } else if (summoner.displayName) {
-            summonerName = summoner.displayName;
-          }
+      for (const player of allTeams) {
+        // Enrich selection map with champ select indices (works for both teams)
+        if (isNumber(player.selectedSkinIndex) && player.puuid) {
+          selectionMap.set(player.puuid, player.selectedSkinIndex);
+        }
 
-          const selectedSkinIndex = selectionMap.get(summoner.puuid);
-          let skinId = null;
-          if (
-            selectedSkinIndex !== undefined &&
-            selectedSkinIndex !== null &&
-            team.championId !== undefined &&
-            team.championId !== null
-          ) {
-            skinId = team.championId * 1000 + selectedSkinIndex;
+        let summoner = null;
+        if (player.summonerId) {
+          try {
+            summoner = await this.makeRequest(`/lol-summoner/v1/summoners/${player.summonerId}`);
+          } catch (err) {
+            // Best-effort; keep null
           }
+        }
+
+        const summonerName = resolveName(player, summoner);
+        const { username, tagLine } = parseRiotId(summonerName);
+
+        const skinId = deriveSkinId({
+          ...player,
+          puuid: player.puuid || summoner?.puuid || null
+        });
 
         players.push({
-          summonerId: team.summonerId,
-          puuid: summoner.puuid,
-          summonerName: summonerName,
-          championId: team.championId,
-          cellId: team.cellId,
-          profileIconId: summoner.profileIconId || null,
+          summonerId: player.summonerId,
+          puuid: summoner ? summoner.puuid : player.puuid || null,
+          username: username,
+          tagLine: tagLine,
+          championId: player.championId,
+          cellId: player.cellId,
+          teamId: player.teamId,
+          profileIconId: summoner ? summoner.profileIconId || null : null,
           skinId,
           source: 'championSelect'
         });
-      }
-    }
       }
 
       return players;
@@ -204,35 +266,28 @@ class LCUConnector {
       ];
 
       for (const player of allPlayers) {
+        // Capture any selectedSkinIndex from live game snapshot
+        if (isNumber(player.selectedSkinIndex) && player.puuid) {
+          selectionMap.set(player.puuid, player.selectedSkinIndex);
+        }
+
         // Fetch summoner name using summonerId since gameData doesn't include names
         const summoner = await this.makeRequest(`/lol-summoner/v1/summoners/${player.summonerId}`);
 
-        // Use gameName#tagLine format for Riot ID (post-2023 system)
-        let summonerName = 'Unknown';
-        if (summoner) {
-          if (summoner.gameName && summoner.tagLine) {
-            summonerName = `${summoner.gameName}#${summoner.tagLine}`;
-          } else if (summoner.displayName) {
-            summonerName = summoner.displayName;
-          }
-        }
+        const summonerName = resolveName(player, summoner);
+        const { username, tagLine } = parseRiotId(summonerName);
 
-        // Derive skinId strictly from selectedSkinIndex
-        const selectedSkinIndex = selectionMap.get(player.puuid);
-        let skinId = null;
-        if (
-          selectedSkinIndex !== undefined &&
-          selectedSkinIndex !== null &&
-          player.championId !== undefined &&
-          player.championId !== null
-        ) {
-          skinId = player.championId * 1000 + selectedSkinIndex;
-        }
+        // Derive skinId from any available source (selectedSkinId, skinId, or selectedSkinIndex)
+        const skinId = deriveSkinId({
+          ...player,
+          puuid: player.puuid || summoner?.puuid || null
+        });
 
         players.push({
           summonerId: player.summonerId,
           puuid: summoner ? summoner.puuid : null,
-          summonerName: summonerName,
+          username: username,
+          tagLine: tagLine,
           championId: player.championId,
           teamId: player.teamId,
           profileIconId: summoner ? summoner.profileIconId || null : null,

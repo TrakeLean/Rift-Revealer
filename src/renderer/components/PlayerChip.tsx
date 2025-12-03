@@ -15,7 +15,8 @@ interface PlayerTag {
 
 interface PlayerChipProps {
   puuid: string
-  summonerName: string
+  username: string
+  tagLine: string
   encounterCount: number
   tags?: PlayerTag[]
   wins?: number
@@ -45,7 +46,8 @@ interface PlayerChipProps {
 
 export function PlayerChip({
   puuid,
-  summonerName,
+  username,
+  tagLine,
   encounterCount,
   tags: tagsProp,
   wins = 0,
@@ -65,6 +67,7 @@ export function PlayerChip({
   championId,
   isExpanded = false,
 }: PlayerChipProps) {
+  const summonerName = `${username}#${tagLine}`
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
   const [playerTags, setPlayerTags] = useState<any[]>(tagsProp || [])
   const [imageIndex, setImageIndex] = useState(0)
@@ -407,7 +410,8 @@ export function PlayerChip({
         open={tagMenuOpen}
         onOpenChange={setTagMenuOpen}
         puuid={puuid}
-        summonerName={summonerName}
+        username={username}
+        tagLine={tagLine}
         existingTags={playerTags}
         onTagsUpdated={handleTagsUpdated}
       />

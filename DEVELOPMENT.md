@@ -26,9 +26,13 @@ Desktop app that automatically monitors League of Legends lobbies and shows your
 - `.claude/skills/lol-modern-ui/SKILL.md` - **MANDATORY** UI design system (dark theme, esports aesthetic)
 - `src/main.js` - Electron main process, gameflow monitoring, IPC handlers
 - `src/database/db.js` - SQLite operations, player history queries, mode categorization
+- `src/api/updateChecker.js` - Update checking logic
 - `src/renderer/pages/LobbyAnalysis.tsx` - Main lobby detection UI
+- `src/renderer/pages/Settings.tsx` - Configuration and settings page
 - `src/renderer/components/PlayerChip.tsx` - Player card with stats
 - `src/renderer/components/ModeStatsRow.tsx` - Mode-specific stat cards
+- `src/renderer/components/PlayerTagMenu.tsx` - Player tagging dialog
+- `src/renderer/components/UpdateNotification.tsx` - Update notification dialog
 - `CLAUDE.md` - Project instructions for Claude Code
 
 **Current State:**
@@ -242,23 +246,29 @@ Rift-Revealer/
 │   │   └── db.js                    # SQLite operations + mode categorization
 │   ├── api/
 │   │   ├── riotApi.js               # Riot Games API client
-│   │   └── lcuConnector.js          # League Client connector (lockfile)
+│   │   ├── lcuConnector.js          # League Client connector (lockfile)
+│   │   └── updateChecker.js         # Update checking logic
 │   └── renderer/                    # React frontend
 │       ├── main.tsx                 # React entry point
-│       ├── App.tsx                  # Root component + sidebar
+│       ├── App.tsx                  # Root component + top navigation
 │       ├── components/
 │       │   ├── ui/                  # shadcn/ui base components
 │       │   ├── PlayerChip.tsx       # Player card with stats
 │       │   ├── ModeStatsRow.tsx     # Mode-specific stat cards
 │       │   ├── StatsPanel.tsx       # Expandable detailed stats
 │       │   ├── MatchCard.tsx        # Single match display
-│       │   └── TagPill.tsx          # Player tag badges
+│       │   ├── TagPill.tsx          # Player tag badges
+│       │   ├── PlayerTagMenu.tsx    # Player tagging dialog
+│       │   ├── UpdateNotification.tsx  # Update notification dialog
+│       │   └── ErrorBoundary.tsx    # Error handling wrapper
 │       ├── pages/
 │       │   ├── LobbyAnalysis.tsx    # Main lobby detection page
-│       │   ├── MatchHistory.tsx     # Match import page
-│       │   └── Settings.tsx         # Configuration page
+│       │   ├── Settings.tsx         # Configuration page
+│       │   └── DevPlayground.tsx    # Development testing page
 │       ├── types/
 │       │   └── index.ts             # TypeScript interfaces
+│       ├── lib/
+│       │   └── utils.ts             # Utility functions
 │       └── styles/
 │           └── globals.css          # Tailwind + design tokens
 ├── database/
@@ -269,6 +279,7 @@ Rift-Revealer/
 │       └── lol-modern-ui/           # UI design system (MANDATORY)
 │           ├── SKILL.md             # Design rules & component catalog
 │           ├── tokens.json          # Color/spacing tokens
+│           ├── components/          # Component reference files
 │           └── examples/            # Reference implementations
 ├── dist/                            # Built executables (not in git)
 ├── dist-renderer/                   # Vite build output (not in git)
@@ -309,26 +320,61 @@ Rift-Revealer/
 ### Database Design
 - **Location:** `app.getPath('userData')/database/rift-revealer.db`
   - **Critical:** NOT in asar (read-only) - uses writable user directory
+
 - **Tables:**
-  - `user_config` - Summoner name, region, API key
-  - `players` - Player PUUIDs and names
-  - `matches` - Game records with queue_id
-  - `match_participants` - Detailed player stats per game
-- **Key queries:**
-  - `getPlayerHistory()` - Fetch games with a player, grouped by mode
-  - `saveMatch()` - Insert match with participant stats
-  - `categorizeQueue()` - Group queue IDs into mode types
+  - `user_config` - Single-row table (id=1) with PUUID, summoner name, region, API key, auto-update and auto-start settings
+  - `players` - Player PUUIDs, summoner names, region, last seen timestamp, profile icon ID
+  - `matches` - Game records with match_id, game_creation, duration, mode, queue_id
+  - `match_participants` - Detailed player stats: PUUID, summoner name, champion, skin_id, team, KDA, win, lane
+  - `player_tags` - Player tagging system (toxic, friendly, notable, duo) with optional notes
+  - `skin_cache` - Cached skin asset paths mapped to skin_id and champion_id
+
+- **Key Features:**
+  - **Single-row user_config:** Enforced by PRIMARY KEY CHECK(id = 1) constraint
+  - **Skin tracking:** Skins stored per match participant, not per player (players can use different skins)
+  - **Profile icons:** Stored in players table, fetched from Riot API during match import
+  - **Lane inference:** Automatically fills missing/INVALID lane assignments per team (TOP, JUNGLE, MIDDLE, BOTTOM, SUPPORT)
+  - **Name normalization:** Handles Riot ID format (GameName#TAG), legacy summoner names, and space variations
+  - **Live skin caching:** In-memory cache (liveSkinSelections) maps PUUIDs and names to skin IDs from gameflow
+
+- **Key Methods:**
+  - `getPlayerHistory()` - Fetch games with a player, grouped by mode (PUUID or name fallback)
+  - `saveMatch()` - Insert match with participant stats, infer missing lanes, resolve skin IDs from live cache
+  - `categorizeQueue()` - Group queue IDs into mode types (Ranked, Normal, ARAM, Arena, Other)
+  - `setLiveSkinSelections()` - Cache skin selections from live lobby/gameflow
+  - `getMostRecentMatchRoster()` - Get last match roster with full encounter stats
+  - `addPlayerTag()` / `getPlayerTags()` - Player tagging operations
+  - `getSkinCacheEntry()` / `upsertSkinCacheEntry()` - Skin asset caching
+
+- **Migrations:**
+  - Automatic migrations handle schema updates (adding columns, rebuilding tables)
+  - Foreign keys disabled during destructive migrations to avoid violations
 
 ### LCU Integration
 - **How it works:**
-  1. Read `lockfile` from LoL installation
-  2. Extract port, password, process info
-  3. HTTPS requests to `https://127.0.0.1:{port}/lol-*`
-  4. Basic Auth with `riot:{password}`
-- **Endpoints:**
-  - `/lol-champ-select/v1/session` - Champion select lobby
-  - `/lol-gameflow/v1/session` - Active game session
-- **Error handling:** Silent failures during auto-monitor (client not always running)
+  1. Search multiple possible lockfile locations (C:\Riot Games, D:\Riot Games, LocalAppData, ProgramData)
+  2. Read `lockfile` content: `processName:processId:port:password:protocol`
+  3. Extract port and password token from lockfile
+  4. HTTPS requests to `https://127.0.0.1:{port}/lol-*` with self-signed cert (rejectUnauthorized: false)
+  5. Basic Auth with `riot:{password}` in base64
+
+- **Key Endpoints:**
+  - `/lol-summoner/v1/current-summoner` - Get current user summoner info
+  - `/lol-champ-select/v1/session` - Champion select lobby (both teams in draft)
+  - `/lol-gameflow/v1/session` - Active game session (in-game state)
+  - `/lol-summoner/v1/summoners/{id}` - Fetch summoner details by ID
+
+- **Enhanced Features:**
+  - **Name caching:** Three-level cache (PUUID, summonerId, cellId) to persist names across gameflow phases
+  - **Name resolution:** Fallback chain through multiple fields (gameName#tagLine, riotIdGameName, displayName, summonerName, obfuscatedSummonerName, cached values, PUUID)
+  - **Skin resolution:** Derives skin_id from selectedSkinId, skinId, or selectedSkinIndex * 1000 + championId
+  - **Skin index mapping:** Builds map from gameData.playerChampionSelections to track skin choices
+  - **Dual source support:** Works in both champion select (myTeam/theirTeam) and in-game (teamOne/teamTwo)
+
+- **Error handling:**
+  - Silent failures during auto-monitor (client not always running)
+  - Best-effort summoner lookups (continues if summoner API fails)
+  - Graceful fallback when no lobby/game detected
 
 ---
 
@@ -370,6 +416,29 @@ Rift-Revealer/
 - **Removed:** `lastLobbyHash` variable (replaced with `lastAnalyzedPlayers`)
 - **Updated:** Stop-auto-monitor handler to use correct state variable
 - **Fixed:** Outdated UI messages mentioning "enable auto-monitor"
+
+---
+
+## Recent Changes (v1.5.x - 2025-12)
+
+### UI Restructure (v1.5.0)
+- **Removed:** Match History page (functionality moved to Settings)
+- **Added:** Top navigation bar (removed sidebar navigation)
+- **Added:** DevPlayground.tsx for development testing
+- **Changed:** Settings now a dedicated tab instead of modal
+
+### New Components Added
+- **UpdateNotification.tsx** - Custom update notification dialog
+- **PlayerTagMenu.tsx** - Player tagging system dialog
+- **ErrorBoundary.tsx** - Error handling wrapper component
+- **updateChecker.js** - Update checking logic module
+
+### Enhanced Features (v1.5.4)
+- **Skin system:** Player cards now show champion/skin backgrounds with fallbacks
+- **Auto-start fixes:** Windows auto-start now works correctly with proper registry entries
+- **Lane/role improvements:** Better lane detection and ordering in match data
+- **Live lobby persistence:** Player names cached across gameflow phases
+- **Skin tracking:** Skin IDs now properly saved and displayed from live lobbies
 
 ---
 

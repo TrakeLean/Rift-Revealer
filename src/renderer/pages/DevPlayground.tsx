@@ -13,7 +13,8 @@ const tagSamples = [
 
 type PlayerPreview = {
   puuid: string
-  summonerName: string
+  username: string
+  tagLine: string
   encounterCount: number
   wins: number
   losses: number
@@ -109,7 +110,9 @@ const buildRosterRows = (players: RosterPlayer[]) => {
       [...teamPlayers].sort((a, b) => {
         const roleDiff = getRoleOrder(a) - getRoleOrder(b)
         if (roleDiff !== 0) return roleDiff
-        return (a.summonerName || '').localeCompare(b.summonerName || '')
+        const aName = `${a.username}#${a.tagLine}`
+        const bName = `${b.username}#${b.tagLine}`
+        return aName.localeCompare(bName)
       })
 
     const leftTeam = sortTeam(byTeam[leftTeamId] || [])
@@ -132,7 +135,9 @@ const buildRosterRows = (players: RosterPlayer[]) => {
     if ((a.teamId ?? 0) !== (b.teamId ?? 0)) return (a.teamId ?? 0) - (b.teamId ?? 0)
     const roleDiff = getRoleOrder(a) - getRoleOrder(b)
     if (roleDiff !== 0) return roleDiff
-    return (a.summonerName || '').localeCompare(b.summonerName || '')
+    const aName = `${a.username}#${a.tagLine}`
+    const bName = `${b.username}#${b.tagLine}`
+    return aName.localeCompare(bName)
   })
 
   const rowCount = Math.ceil(sorted.length / 2)
@@ -150,7 +155,8 @@ const buildRosterRows = (players: RosterPlayer[]) => {
 const mockPlayers: PlayerPreview[] = [
   {
     puuid: 'dev-mock-1',
-    summonerName: 'ShadowFang',
+    username: 'ShadowFang',
+    tagLine: 'NA1',
     encounterCount: 14,
     wins: 8,
     losses: 6,
@@ -272,7 +278,8 @@ const mockPlayers: PlayerPreview[] = [
   },
   {
     puuid: 'dev-mock-2',
-    summonerName: 'RuneScholar',
+    username: 'RuneScholar',
+    tagLine: 'EUW',
     encounterCount: 6,
     wins: 4,
     losses: 2,
@@ -394,16 +401,16 @@ const mockRosterStandard: LastMatchRoster = {
   gameCreation: Date.now() - 1000 * 60 * 42,
   userTeamId: 100,
   players: [
-    { puuid: 'mock-top-blue', summonerName: 'BlueTop', championName: 'Garen', teamId: 100, teamPosition: 'TOP', profileIconId: 23, win: true },
-    { puuid: 'mock-jg-blue', summonerName: 'BlueJungle', championName: 'Lee Sin', teamId: 100, teamPosition: 'JUNGLE', profileIconId: 56, win: true },
-    { puuid: 'mock-mid-blue', summonerName: 'BlueMid', championName: 'Ahri', teamId: 100, teamPosition: 'MIDDLE', profileIconId: 98, win: true },
-    { puuid: 'mock-adc-blue', summonerName: 'BlueADC', championName: 'Jinx', teamId: 100, teamPosition: 'BOTTOM', profileIconId: 321, win: true },
-    { puuid: 'mock-sup-blue', summonerName: 'BlueSupport', championName: 'Thresh', teamId: 100, teamPosition: 'UTILITY', profileIconId: 412, win: true },
-    { puuid: 'mock-top-red', summonerName: 'RedTop', championName: 'Darius', teamId: 200, teamPosition: 'TOP', profileIconId: 122, win: false },
-    { puuid: 'mock-jg-red', summonerName: 'RedJungle', championName: 'Kayn', teamId: 200, teamPosition: 'JUNGLE', profileIconId: 141, win: false },
-    { puuid: 'mock-mid-red', summonerName: 'RedMid', championName: 'Syndra', teamId: 200, teamPosition: 'MIDDLE', profileIconId: 134, win: false },
-    { puuid: 'mock-adc-red', summonerName: 'RedADC', championName: 'Caitlyn', teamId: 200, teamPosition: 'BOTTOM', profileIconId: 51, win: false },
-    { puuid: 'mock-sup-red', summonerName: 'RedSupport', championName: 'Leona', teamId: 200, teamPosition: 'UTILITY', profileIconId: 89, win: false },
+    { puuid: 'mock-top-blue', username: 'BlueTop', tagLine: 'NA1', championName: 'Garen', teamId: 100, teamPosition: 'TOP', profileIconId: 23, win: true },
+    { puuid: 'mock-jg-blue', username: 'BlueJungle', tagLine: 'NA1', championName: 'Lee Sin', teamId: 100, teamPosition: 'JUNGLE', profileIconId: 56, win: true },
+    { puuid: 'mock-mid-blue', username: 'BlueMid', tagLine: 'NA1', championName: 'Ahri', teamId: 100, teamPosition: 'MIDDLE', profileIconId: 98, win: true },
+    { puuid: 'mock-adc-blue', username: 'BlueADC', tagLine: 'NA1', championName: 'Jinx', teamId: 100, teamPosition: 'BOTTOM', profileIconId: 321, win: true },
+    { puuid: 'mock-sup-blue', username: 'BlueSupport', tagLine: 'NA1', championName: 'Thresh', teamId: 100, teamPosition: 'UTILITY', profileIconId: 412, win: true },
+    { puuid: 'mock-top-red', username: 'RedTop', tagLine: 'NA1', championName: 'Darius', teamId: 200, teamPosition: 'TOP', profileIconId: 122, win: false },
+    { puuid: 'mock-jg-red', username: 'RedJungle', tagLine: 'NA1', championName: 'Kayn', teamId: 200, teamPosition: 'JUNGLE', profileIconId: 141, win: false },
+    { puuid: 'mock-mid-red', username: 'RedMid', tagLine: 'NA1', championName: 'Syndra', teamId: 200, teamPosition: 'MIDDLE', profileIconId: 134, win: false },
+    { puuid: 'mock-adc-red', username: 'RedADC', tagLine: 'NA1', championName: 'Caitlyn', teamId: 200, teamPosition: 'BOTTOM', profileIconId: 51, win: false },
+    { puuid: 'mock-sup-red', username: 'RedSupport', tagLine: 'NA1', championName: 'Leona', teamId: 200, teamPosition: 'UTILITY', profileIconId: 89, win: false },
   ],
 }
 
@@ -414,7 +421,8 @@ const mockRosterArena: LastMatchRoster = {
   userTeamId: 2,
   players: Array.from({ length: 16 }).map((_, idx) => ({
     puuid: `arena-${idx}`,
-    summonerName: `ArenaPlayer${idx + 1}`,
+    username: `ArenaPlayer${idx + 1}`,
+    tagLine: 'NA1',
     championName: ['Teemo', 'Garen', 'Lux', 'Zed', 'Ashe', 'Diana', 'Yasuo', 'Janna'][idx % 8],
     teamId: Math.floor(idx / 2) + 1,
     profileIconId: 500 + idx,
@@ -452,7 +460,8 @@ export function DevPlayground() {
             <div key={player.puuid} className="space-y-3">
               <PlayerChip
                 puuid={player.puuid}
-                summonerName={player.summonerName}
+                username={player.username}
+                tagLine={player.tagLine}
                 encounterCount={player.encounterCount}
                 wins={player.wins}
                 losses={player.losses}

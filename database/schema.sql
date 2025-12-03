@@ -2,7 +2,8 @@
 CREATE TABLE IF NOT EXISTS user_config (
     id INTEGER PRIMARY KEY CHECK(id = 1),
     puuid TEXT NOT NULL UNIQUE,
-    summoner_name TEXT NOT NULL,
+    username TEXT NOT NULL,
+    tag_line TEXT NOT NULL,
     region TEXT NOT NULL,
     riot_api_key TEXT,
     last_updated INTEGER,
@@ -13,11 +14,11 @@ CREATE TABLE IF NOT EXISTS user_config (
 -- Players table
 CREATE TABLE IF NOT EXISTS players (
     puuid TEXT PRIMARY KEY,
-    summoner_name TEXT NOT NULL,
+    username TEXT NOT NULL,
+    tag_line TEXT NOT NULL,
     region TEXT NOT NULL,
     last_seen INTEGER,
-    profile_icon_id INTEGER,
-    last_skin_id INTEGER
+    profile_icon_id INTEGER
 );
 
 -- Matches table
@@ -35,7 +36,8 @@ CREATE TABLE IF NOT EXISTS match_participants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     match_id TEXT NOT NULL,
     puuid TEXT NOT NULL,
-    summoner_name TEXT,
+    username TEXT,
+    tag_line TEXT,
     champion_name TEXT,
     champion_id INTEGER,
     skin_id INTEGER,
@@ -53,7 +55,8 @@ CREATE TABLE IF NOT EXISTS match_participants (
 CREATE TABLE IF NOT EXISTS player_tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     puuid TEXT NOT NULL,
-    summoner_name TEXT NOT NULL,
+    username TEXT NOT NULL,
+    tag_line TEXT NOT NULL,
     tag_type TEXT NOT NULL CHECK(tag_type IN ('toxic', 'friendly', 'notable', 'duo')),
     note TEXT,
     created_at INTEGER NOT NULL,
@@ -64,5 +67,6 @@ CREATE TABLE IF NOT EXISTS player_tags (
 CREATE INDEX IF NOT EXISTS idx_participants_match ON match_participants(match_id);
 CREATE INDEX IF NOT EXISTS idx_participants_puuid ON match_participants(puuid);
 CREATE INDEX IF NOT EXISTS idx_matches_creation ON matches(game_creation);
-CREATE INDEX IF NOT EXISTS idx_players_name ON players(summoner_name);
+CREATE INDEX IF NOT EXISTS idx_players_username ON players(username);
+CREATE INDEX IF NOT EXISTS idx_players_name_tag ON players(username, tag_line);
 CREATE INDEX IF NOT EXISTS idx_player_tags_puuid ON player_tags(puuid);

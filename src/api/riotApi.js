@@ -47,28 +47,14 @@ class RiotAPI {
     }
   }
 
-  async getSummonerByName(summonerName, region) {
+  async getSummonerByRiotId(username, tagLine, region) {
     try {
-      // Check if it's a Riot ID (contains #)
-      if (summonerName.includes('#')) {
-        const [gameName, tagLine] = summonerName.split('#');
-        const account = await this.getAccountByRiotId(gameName, tagLine, region);
-        return {
-          puuid: account.puuid,
-          gameName: account.gameName,
-          tagLine: account.tagLine,
-          summonerName: `${gameName}#${tagLine}`
-        };
-      }
-
-      // Otherwise use old summoner name API
-      const response = await axios.get(
-        `https://${region}.api.riotgames.com/lol/summoner/v4/summoners/by-name/${encodeURIComponent(summonerName)}`,
-        {
-          headers: { 'X-Riot-Token': this.apiKey }
-        }
-      );
-      return response.data;
+      const account = await this.getAccountByRiotId(username, tagLine, region);
+      return {
+        puuid: account.puuid,
+        username: account.gameName,
+        tagLine: account.tagLine
+      };
     } catch (error) {
       throw new Error(`Failed to fetch summoner: ${error.response?.data?.status?.message || error.message}`);
     }

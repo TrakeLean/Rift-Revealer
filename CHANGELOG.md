@@ -5,6 +5,35 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased (1.6.0)] - BREAKING CHANGE
+
+### ⚠️ BREAKING CHANGES
+- **Database schema refactored**: `summoner_name` field split into `username` + `tag_line` across all tables
+- **Existing database incompatible**: Users must delete `~/AppData/Roaming/rift-revealer/database/` folder and re-import match history
+- **Settings UI updated**: Now requires separate inputs for username and tag (e.g., "YourName" + "NA1" instead of "YourName#NA1")
+
+### Changed
+- Database now stores Riot IDs as separate `username` and `tag_line` fields, aligning with Riot API format
+- All database queries updated to use split fields for cleaner SQL and better indexing
+- Added compound index on `(username, tag_line)` for faster player lookups
+- Settings page now has two input fields: "Riot ID Username" and "Riot ID Tag"
+- All IPC method signatures updated to accept `username` and `tagLine` as separate parameters
+- Created helper functions `formatRiotId(username, tagLine)` and `parseRiotId(fullName)` for consistent formatting
+- Updated TypeScript interfaces across all components (`UserConfig`, `AnalysisResult`, `RosterPlayer`, etc.)
+- Improved name matching logic with normalized case-insensitive comparison
+
+### Technical Details
+- **Files Updated**: schema.sql, db.js (970 lines rewritten), riotApi.js, lcuConnector.js, main.js, preload.js, types/index.ts
+- **React Components Updated**: Settings.tsx, LobbyAnalysis.tsx, PlayerChip.tsx, PlayerTagMenu.tsx, DevPlayground.tsx
+- **Database Methods**: All 20+ methods updated with new signatures (`savePlayer`, `getPlayerHistory`, `addPlayerTag`, etc.)
+- **Helper Functions**: Exported `formatRiotId` and `parseRiotId` from db.js for use across the app
+
+### Why This Change?
+- Riot API returns `gameName` and `tagLine` separately - storing them split eliminates parsing overhead
+- Better query performance with direct field access instead of string operations
+- Cleaner data model that matches the source format
+- Enables future features like tag-specific filtering or username-only searches
+
 ## [Unreleased (1.5.4)]
 
 ### Changed
@@ -22,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Lane/role capture now prefers teamPosition → individualPosition → role → lane, improving scoreboard-style ordering with more aliases (Top/Jungle/Mid/Bot/Support).
 - Added resilient migrations that always create `players.last_skin_id` and `match_participants.skin_id`, preventing missing-column crashes after updates.
 - Persist skin IDs from live lobbies into player records so cached skin/champion backgrounds render even when the client is closed.
+- Skin capture now uses `selectedSkinId`/`skinId` with champ-select and in-game fallbacks so the chosen skin carries through into last-match rosters (no more default tiles after a game).
+- Live lobby names are cached across phases and fall back through multiple session fields to avoid players reverting to "Unknown".
+- Match imports now infer missing/INVALID lanes per team (Top/Jungle/Mid/Bot/Support) to keep roster/scoreboard ordering consistent.
 
 ## [1.5.3] - 2025-12-02
 
