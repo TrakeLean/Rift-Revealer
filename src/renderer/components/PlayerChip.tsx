@@ -72,6 +72,15 @@ export function PlayerChip({
   const [championImageSrc, setChampionImageSrc] = useState<string | null>(null)
   const isClickable = Boolean(onClick)
 
+  const debugSkin = (label: string, detail?: unknown) => {
+    // Limit noisy debug logging to non-production builds
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mode = (import.meta as any)?.env?.MODE
+    if (mode && mode !== 'production') {
+      console.debug(`[SkinDebug] ${summonerName}: ${label}`, detail ?? '')
+    }
+  }
+
   // Load tags for this player
   const loadTags = async () => {
     try {
@@ -125,11 +134,13 @@ export function PlayerChip({
     let cancelled = false
     async function loadSkinImage() {
       if (!window.api?.getSkinImage || skinId === null || skinId === undefined || championId === null || championId === undefined) {
+        debugSkin('skip skin fetch', { reason: 'missing api or ids', skinId, championId, hasApi: Boolean(window.api?.getSkinImage) })
         if (!cancelled) setSkinImageSrc(null)
         return
       }
       try {
         const result = await window.api.getSkinImage(skinId, championId)
+        debugSkin('skin fetch result', { skinId, championId, success: result?.success, path: result?.path })
         if (!cancelled) {
           if (result?.success && result.path) {
             setSkinImageSrc(result.path)
@@ -138,6 +149,7 @@ export function PlayerChip({
           }
         }
       } catch (err) {
+        debugSkin('skin fetch error', { skinId, championId, error: (err as Error)?.message })
         if (!cancelled) setSkinImageSrc(null)
       }
     }
@@ -151,7 +163,7 @@ export function PlayerChip({
   useEffect(() => {
     let cancelled = false
     async function loadChampTile() {
-      if (!window.api?.getChampionTile || championId === null || championId === undefined || skinId !== null && skinId !== undefined) {
+      if (!window.api?.getChampionTile || championId === null || championId === undefined) {
         if (!cancelled) setChampionImageSrc(null)
         return
       }
@@ -185,17 +197,8 @@ export function PlayerChip({
   const champFromSkin = typeof skinId === 'number' ? Math.floor(skinId / 1000) : undefined
   const champSlug = championName ? championName.toLowerCase().replace(/[^a-z0-9]/g, '') : null
   const tileSources: string[] = []
-  if (skinId !== null && skinId !== undefined) {
-    tileSources.push(`/tiles/${skinId}.png`)
-    if (champFromSkin !== undefined) {
-      tileSources.push(`/tiles/${champFromSkin}_${skinNum ?? 0}.png`)
-    }
-    if (championId !== undefined && championId !== null) {
-      tileSources.push(`/tiles/${championId}_${skinNum ?? 0}.png`)
-    }
-  }
-  // Base champion tile fallbacks (no remote calls)
-  if ((skinId === null || skinId === undefined) && championId !== undefined && championId !== null) {
+  // Base champion tile fallbacks (no remote calls); used until skin art is fetched
+  if (championId !== undefined && championId !== null) {
     tileSources.push(`/tiles/${championId}_0.png`)
     tileSources.push(`/tiles/${championId}.png`)
   }
@@ -308,6 +311,9 @@ export function PlayerChip({
                   playerTags.length > 0 ? "text-primary" : "text-muted-foreground"
                 )} />
               </Button>
+              <span className="text-[11px] font-medium text-muted-foreground bg-background/80 border border-border/60 rounded-md px-2 py-1 leading-none">
+                {encounterCount} {encounterCount === 1 ? 'game' : 'games'} together
+              </span>
               {isClickable && (
                 isExpanded ? (
                   <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -351,12 +357,8 @@ export function PlayerChip({
             </div>
           )}
 
-          {/* Mode-Specific Stats - Compact Badges */}
-          <ModeStatsRow byMode={byMode} />
-
-          {/* Tags & Last Seen - Single Row */}
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            {/* Tags */}
+          {/* Mode-specific stats and meta row combined */}
+          <ModeStatsRow byMode={byMode}>
             {playerTags.length > 0 && (
               <div className="flex gap-1.5 flex-wrap">
                 {playerTags.map((tag, idx) => (
@@ -389,7 +391,6 @@ export function PlayerChip({
               </div>
             )}
 
-            {/* Last Seen Info */}
             {lastSeen && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground ml-auto">
                 <span>{formatTimeAgo(lastSeen.timestamp)}</span>
@@ -397,7 +398,7 @@ export function PlayerChip({
                 <span className="font-medium text-foreground/80">{lastSeen.champion}</span>
               </div>
             )}
-          </div>
+          </ModeStatsRow>
         </div>
       </CardContent>
 

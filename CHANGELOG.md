@@ -5,6 +5,24 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased (1.5.4)]
+
+### Changed
+- Player card backgrounds now fall back to champion tiles until a fetched skin image is available; skins are derived solely from `selectedSkinIndex` in gameflow data.
+- Mode stats row can render extra content; tags and last-seen info were moved into the same block for a tighter layout.
+- Champ select analysis now runs even in anonymized queues when player IDs are present, so familiar players surface sooner.
+- Database no longer stores `last_skin_id` on players; skin tracking lives on match participants only.
+- Added skin fetch debug logging (renderer + main) to trace missing/failed skin downloads and cache population.
+- Fixed renderer debug logging to avoid `process` access (which is undefined in the browser context).
+- Live skin selections from gameflow are cached and applied during match import so `match_participants.skin_id` is populated when available.
+- Match imports now persist the champion/skin pairing from gameflow (`championId` + `selectedSkinIndex`) into `match_participants` so the exact skin can be rendered later.
+
+### Fixed
+- Windows auto-start now writes the correct login item (including dev args) and rewrites bad entries so the app launches instead of the bare Electron shell on startup.
+- Lane/role capture now prefers teamPosition → individualPosition → role → lane, improving scoreboard-style ordering with more aliases (Top/Jungle/Mid/Bot/Support).
+- Added resilient migrations that always create `players.last_skin_id` and `match_participants.skin_id`, preventing missing-column crashes after updates.
+- Persist skin IDs from live lobbies into player records so cached skin/champion backgrounds render even when the client is closed.
+
 ## [1.5.3] - 2025-12-02
 
 ### Changed

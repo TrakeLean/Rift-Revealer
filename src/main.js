@@ -607,10 +607,13 @@ ipcMain.handle('get-last-match-roster', async () => {
 
 ipcMain.handle('get-skin-image', async (event, skinId, championId) => {
   try {
+    console.log('[Skin] get-skin-image request', { skinId, championId });
     const resolvedPath = await getSkinImagePath(skinId, championId);
     if (!resolvedPath) {
+      console.log('[Skin] no image available', { skinId, championId });
       return { success: false, error: 'Skin image not available' };
     }
+    console.log('[Skin] resolved image path', { skinId, championId, resolvedPath });
     return { success: true, path: resolvedPath };
   } catch (error) {
     console.error('Failed to get skin image:', error);
@@ -653,6 +656,28 @@ ipcMain.handle('clear-skin-cache', async () => {
     return { success: true, removed };
   } catch (error) {
     console.error('Failed to clear skin cache:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-skin-cache-info', async () => {
+  try {
+    const dir = getSkinCacheDir();
+    let files = 0;
+    let bytes = 0;
+    if (fs.existsSync(dir)) {
+      for (const file of fs.readdirSync(dir)) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile()) {
+          files += 1;
+          bytes += stat.size;
+        }
+      }
+    }
+    return { success: true, files, bytes };
+  } catch (error) {
+    console.error('Failed to get skin cache info:', error);
     return { success: false, error: error.message };
   }
 });
@@ -879,6 +904,11 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
   console.log('Lobby players:', lobbyPlayers.map(p => p.summonerName));
   console.log('Your summoner name (from config):', config.summoner_name);
 
+  // Cache live skin selections so match imports can persist skin IDs
+  if (db?.setLiveSkinSelections) {
+    db.setLiveSkinSelections(lobbyPlayers);
+  }
+
   const analysis = [];
 
   for (const player of lobbyPlayers) {
@@ -1047,45 +1077,33 @@ async function startGameflowMonitor() {
           break;
 
         case 'ChampSelect': {
-          // In champion select - check if queue is anonymized
+          // In champion select - try to analyze even in anonymized queues (if names/puuids are present)
           const champSelect = await lcuConnector.getChampSelect();
           const queueId = champSelect?.queue?.id || gameflowSession?.queue?.id || gameflowSession?.gameData?.queue?.id || 0;
           const queueName = getQueueName(queueId);
           const isAnonymized = ANONYMIZED_QUEUES.includes(queueId);
 
-          if (isAnonymized) {
-            // Ranked queue - names hidden until game starts
-            console.log(`${queueName} (${queueId}) is anonymized - waiting for InProgress state`);
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('gameflow-status', {
-                state: 'ChampSelect',
-                message: `${queueName} - names will appear when game starts`,
-                isAnonymized: true,
-                queueId: queueId,
-                queueName: queueName
-              });
-            }
-          } else {
-            // Normal queue - analyze immediately
-            const lobbyPlayers = await lcuConnector.getLobbyPlayers();
-            const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || p.summonerName).sort());
+          const lobbyPlayers = await lcuConnector.getLobbyPlayers();
+          const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || p.summonerName).sort());
+          const hasIdentifiablePlayers = lobbyPlayers.some(p => p.puuid || p.summonerName);
 
-            // Only analyze if players changed
-            if (playerHash !== lastAnalyzedPlayers) {
-              lastAnalyzedPlayers = playerHash;
-              console.log(`=== ANALYZING LOBBY (ChampSelect - ${queueName}) ===`);
-              await analyzeLobbyPlayers(lobbyPlayers);
-            }
+          if (hasIdentifiablePlayers && playerHash !== lastAnalyzedPlayers) {
+            lastAnalyzedPlayers = playerHash;
+            console.log(`=== ANALYZING LOBBY (ChampSelect - ${queueName}) ===`);
+            await analyzeLobbyPlayers(lobbyPlayers);
+          }
 
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('gameflow-status', {
-                state: 'ChampSelect',
-                message: `In champion select - ${queueName}`,
-                canAnalyze: true,
-                queueId: queueId,
-                queueName: queueName
-              });
-            }
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gameflow-status', {
+              state: 'ChampSelect',
+              message: isAnonymized
+                ? `${queueName} - names may be hidden; analysis will update when available`
+                : `In champion select - ${queueName}`,
+              isAnonymized,
+              canAnalyze: hasIdentifiablePlayers,
+              queueId: queueId,
+              queueName: queueName
+            });
           }
           break;
         }
@@ -1390,17 +1408,24 @@ ipcMain.handle('install-update', async () => {
 
 // ========== Auto-Start IPC Handlers ==========
 
+function buildAutoStartSettings(enabled) {
+  // In production the executable already points at the app, but in dev Electron needs the app path argument
+  const args = app.isPackaged ? [] : [app.getAppPath()];
+  return {
+    openAtLogin: enabled,
+    openAsHidden: false,
+    path: process.execPath,
+    args
+  };
+}
+
 ipcMain.handle('set-auto-start', async (event, enabled) => {
   try {
     // Save to database
     db.setAutoStart(enabled);
 
-    // Update Windows auto-start setting
-    app.setLoginItemSettings({
-      openAtLogin: enabled,
-      openAsHidden: false,
-      args: []
-    });
+    // Update Windows auto-start setting with explicit app path/args
+    app.setLoginItemSettings(buildAutoStartSettings(enabled));
 
     return { success: true, message: 'Auto-start setting saved' };
   } catch (error) {
@@ -1414,6 +1439,9 @@ ipcMain.handle('get-auto-start', async () => {
     // Get the actual Windows setting
     const loginSettings = app.getLoginItemSettings();
     const actualEnabled = loginSettings.openAtLogin;
+
+    // Ensure the login item points to the correct executable/args (especially if toggled from dev)
+    app.setLoginItemSettings(buildAutoStartSettings(actualEnabled));
 
     // Get the database setting
     const dbEnabled = db.getAutoStart();

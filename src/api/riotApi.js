@@ -106,9 +106,17 @@ class RiotAPI {
   }
 
   async importMatchHistory(puuid, region, count = 20, progressCallback = null, isCancelled = () => false) {
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    const getDelayMs = (idx) => {
+      // Keep well below 20 req/sec and under 100 req/2min average.
+      // Use a shorter delay for the first 50, then slow down.
+      return idx < 50 ? 700 : 1500;
+    };
+
     try {
       const matchIds = await this.getMatchIdsByPuuid(puuid, region, count);
       let imported = 0;
+      let rateLimitBackoff = 1000; // starts at 1s, grows on repeated 429s
 
       for (let i = 0; i < matchIds.length; i++) {
         if (isCancelled()) {
@@ -129,8 +137,24 @@ class RiotAPI {
             });
           }
 
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Rate limit to avoid hitting Riot thresholds
+          await sleep(getDelayMs(i));
         } catch (error) {
+          // Handle Riot 429 with Retry-After if available
+          const retryAfter = Number(error?.response?.headers?.['retry-after'] || 0);
+          const status = error?.response?.status;
+          const isRateLimited = status === 429 || /rate limit/i.test(error?.message || '');
+          if (isRateLimited) {
+            const delay = retryAfter > 0
+              ? Math.ceil(retryAfter * 1000)
+              : Math.min(10000, rateLimitBackoff); // cap at 10s
+            console.warn(`Rate limited on ${matchId}. Waiting ${delay}ms before retry...`);
+            await sleep(delay);
+            rateLimitBackoff = Math.min(10000, rateLimitBackoff + 500);
+            i--; // retry same match
+            continue;
+          }
+
           console.error(`Failed to import match ${matchId}:`, error.message);
         }
       }
