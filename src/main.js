@@ -924,9 +924,10 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
       continue;
     }
     console.log(`Checking history for: ${formatRiotId(player.username, player.tagLine)}`);
+    console.log(`  Player data: username="${player.username}", tagLine="${player.tagLine}", puuid="${player.puuid}"`);
     // Prefer PUUID (more reliable) and fall back to name matching
     const history = db.getPlayerHistory(player.username, player.tagLine, player.puuid || null);
-    console.log(`  Found ${history.games.length} games`);
+    console.log(`  Found ${history.games.length} games with stats:`, history.stats ? 'YES' : 'NO');
     // Persist latest cosmetics
     try {
       db.savePlayer(
