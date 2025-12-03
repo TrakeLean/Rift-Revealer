@@ -7,6 +7,13 @@ import { Activity, CheckCircle2, Clock, AlertCircle, Gamepad2, Users } from 'luc
 import { cn } from '@/lib/utils'
 import type { AnalysisResult, LastMatchRoster, RosterPlayer } from '../types'
 
+// Helper to format Riot ID
+const formatRiotId = (username?: string, tagLine?: string) => {
+  if (!username) return 'Unknown'
+  if (!tagLine) return username
+  return `${username}#${tagLine}`
+}
+
 // Map normalized state to a status tone
 const getStatusTone = (normalized: string, isAnonymized?: boolean): 'success' | 'error' | 'info' | 'warning' => {
   if (normalized === 'clientclosed') return 'error'
@@ -39,6 +46,10 @@ const QUEUE_NAMES: Record<number, string> = {
 }
 
 const LIVE_STATES = ['champselect', 'champ select', 'championselect', 'inprogress', 'gamestart', 'reconnect']
+
+// Persist last lobby analysis/status across tab switches
+let cachedDetectedPlayers: AnalysisResult[] = []
+let cachedStatus: { message: string; type: 'success' | 'error' | 'info' | 'warning' } | null = null
 
 export function LobbyAnalysis() {
   const [detectedPlayers, setDetectedPlayers] = useState<AnalysisResult[]>([])
@@ -164,7 +175,9 @@ export function LobbyAnalysis() {
         [...teamPlayers].sort((a, b) => {
           const roleDiff = getRoleOrder(a) - getRoleOrder(b)
           if (roleDiff !== 0) return roleDiff
-          return (a.summonerName || '').localeCompare(b.summonerName || '')
+          const aName = formatRiotId(a.username, a.tagLine)
+          const bName = formatRiotId(b.username, b.tagLine)
+          return aName.localeCompare(bName)
         })
 
       const leftTeam = sortTeam(byTeam[leftTeamId] || [])
@@ -191,7 +204,9 @@ export function LobbyAnalysis() {
       if ((a.teamId ?? 0) !== (b.teamId ?? 0)) return (a.teamId ?? 0) - (b.teamId ?? 0)
       const roleDiff = getRoleOrder(a) - getRoleOrder(b)
       if (roleDiff !== 0) return roleDiff
-      return (a.summonerName || '').localeCompare(b.summonerName || '')
+      const aName = formatRiotId(a.username, a.tagLine)
+      const bName = formatRiotId(b.username, b.tagLine)
+      return aName.localeCompare(bName)
     })
 
     const rowCount = Math.ceil(sorted.length / 2)
@@ -293,19 +308,25 @@ export function LobbyAnalysis() {
       console.log('📥 Received lobby-update event:', data)
       if (data.success && data.data) {
         console.log('  Setting detected players:', data.data.analysis.length)
-        setDetectedPlayers(data.data.analysis || [])
+        const players = data.data.analysis || []
+        setDetectedPlayers(players)
+        cachedDetectedPlayers = players
 
         if (data.data.analysis.length === 0) {
-          setStatus({
+          const nextStatus = {
             message: 'No previous opponents found in current lobby',
             type: 'info',
-          })
+          }
+          setStatus(nextStatus)
+          cachedStatus = nextStatus
         } else {
           const mode = data.data.analysis[0]?.source === 'championSelect' ? 'Champion Select' : 'In-Game'
-          setStatus({
+          const nextStatus = {
             message: `Found ${data.data.analysis.length} player(s) from your match history!`,
             type: 'success',
-          })
+          }
+          setStatus(nextStatus)
+          cachedStatus = nextStatus
         }
       }
     })
@@ -322,11 +343,18 @@ export function LobbyAnalysis() {
   }, [])
 
   useEffect(() => {
+    // Restore last known lobby analysis/status when re-entering the tab
+    if (cachedDetectedPlayers.length > 0) {
+      setDetectedPlayers(cachedDetectedPlayers)
+    }
+    if (cachedStatus) {
+      setStatus(cachedStatus)
+    }
     loadLastRoster()
   }, [loadLastRoster])
 
-  const togglePlayerExpansion = (summonerName: string) => {
-    setExpandedPlayer(expandedPlayer === summonerName ? null : summonerName)
+  const togglePlayerExpansion = (playerKey: string) => {
+    setExpandedPlayer(expandedPlayer === playerKey ? null : playerKey)
   }
 
   // Single source of truth for state info
@@ -511,13 +539,15 @@ export function LobbyAnalysis() {
     const wins = player.wins ?? (player.win ? 1 : 0)
     const losses = player.losses ?? (player.win ? 0 : 1)
     const hasDetails = Boolean(player.asEnemy || player.asAlly || (player.games && player.games.length > 0))
-    const isSelected = expandedPlayer === player.summonerName
+    const playerKey = formatRiotId(player.username, player.tagLine)
+    const isSelected = expandedPlayer === playerKey
 
     return (
       <div key={key} className="space-y-2 h-full">
         <PlayerChip
           puuid={player.puuid}
-          summonerName={player.summonerName}
+          username={player.username}
+          tagLine={player.tagLine}
           encounterCount={encounterCount}
           wins={wins}
           losses={losses}
@@ -531,7 +561,7 @@ export function LobbyAnalysis() {
           championName={player.championName}
           championId={player.championId}
           byMode={player.byMode || undefined}
-          onClick={hasDetails ? () => togglePlayerExpansion(player.summonerName) : undefined}
+          onClick={hasDetails ? () => togglePlayerExpansion(playerKey) : undefined}
           isExpanded={isSelected}
           className={cn("h-full", isSelected && "ring-1 ring-primary/60")}
         />
@@ -572,12 +602,14 @@ export function LobbyAnalysis() {
                 <div className="space-y-3">
                   {detectedPlayers.map((player) => {
                     const hasDetails = Boolean(player.asEnemy || player.asAlly || (player.games && player.games.length > 0));
-                    const isSelected = expandedPlayer === player.player;
+                    const playerKey = formatRiotId(player.username, player.tagLine);
+                    const isSelected = expandedPlayer === playerKey;
                     return (
-                      <div key={player.player} className="space-y-2">
+                      <div key={playerKey} className="space-y-2">
                         <PlayerChip
                           puuid={player.puuid}
-                          summonerName={player.player}
+                          username={player.username}
+                          tagLine={player.tagLine}
                           encounterCount={player.encounterCount}
                           wins={player.wins}
                           losses={player.losses}
@@ -592,7 +624,7 @@ export function LobbyAnalysis() {
                           skinId={player.skinId ?? undefined}
                           championName={player.championName ?? undefined}
                           championId={player.championId ?? undefined}
-                          onClick={hasDetails ? () => togglePlayerExpansion(player.player) : undefined}
+                          onClick={hasDetails ? () => togglePlayerExpansion(playerKey) : undefined}
                           isExpanded={isSelected}
                           className={cn("h-full", isSelected && "ring-1 ring-primary/60")}
                         />
@@ -673,7 +705,7 @@ export function LobbyAnalysis() {
                     const left = rosterLayout.rows[idx]?.left
                     const right = rosterLayout.rows[idx]?.right
                     const expandedData =
-                      expandedPlayer && [left, right].find(p => p && p.summonerName === expandedPlayer)
+                      expandedPlayer && [left, right].find(p => p && formatRiotId(p.username, p.tagLine) === expandedPlayer)
 
                     return (
                       <div key={`row-${idx}`} className="space-y-2">

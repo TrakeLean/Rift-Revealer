@@ -5,6 +5,7 @@ const fs = require('fs');
 const https = require('https');
 const { pathToFileURL } = require('url');
 const Database = require('./database/db');
+const { formatRiotId, parseRiotId } = require('./database/db');
 const RiotAPI = require('./api/riotApi');
 const LCUConnector = require('./api/lcuConnector');
 const UpdateChecker = require('./api/updateChecker');
@@ -67,8 +68,17 @@ function normalizeRiotName(name) {
 function isCurrentUser(player, config) {
   if (!player || !config) return false;
   if (player.puuid && config.puuid && player.puuid === config.puuid) return true;
-  const playerName = normalizeRiotName(player.summonerName);
-  const configName = normalizeRiotName(config.summoner_name);
+
+  // Build player name from username + tagLine
+  const playerName = player.username && player.tagLine
+    ? normalizeRiotName(formatRiotId(player.username, player.tagLine))
+    : { full: '', game: '' };
+
+  // Build config name from username + tag_line
+  const configName = config.username && config.tag_line
+    ? normalizeRiotName(formatRiotId(config.username, config.tag_line))
+    : { full: '', game: '' };
+
   return playerName.full === configName.full || playerName.game === configName.game;
 }
 
@@ -688,8 +698,8 @@ ipcMain.handle('diagnose-database', async () => {
 
     const matchCount = db.db.prepare('SELECT COUNT(*) as count FROM matches').get();
     const participantCount = db.db.prepare('SELECT COUNT(*) as count FROM match_participants').get();
-    const uniquePlayers = db.db.prepare('SELECT COUNT(DISTINCT summoner_name) as count FROM match_participants').get();
-    const sampleNames = db.db.prepare('SELECT DISTINCT summoner_name FROM match_participants LIMIT 20').all();
+    const uniquePlayers = db.db.prepare('SELECT COUNT(DISTINCT username) as count FROM match_participants').get();
+    const sampleNames = db.db.prepare('SELECT DISTINCT username, tag_line FROM match_participants LIMIT 20').all();
 
     let yourMatches = null;
     let recentGames = null;
@@ -714,7 +724,7 @@ ipcMain.handle('diagnose-database', async () => {
         matchCount: matchCount.count,
         participantCount: participantCount.count,
         uniquePlayers: uniquePlayers.count,
-        sampleNames: sampleNames.map(p => p.summoner_name),
+        sampleNames: sampleNames.map(p => formatRiotId(p.username, p.tag_line)),
         yourMatches: yourMatches?.count || 0,
         recentGames
       }
@@ -728,20 +738,15 @@ ipcMain.handle('save-user-config', async (event, config) => {
   return db.saveUserConfig(config);
 });
 
-ipcMain.handle('validate-and-save-config', async (event, summonerName, region, apiKey) => {
+ipcMain.handle('validate-and-save-config', async (event, username, tagLine, region, apiKey) => {
   try {
     riotApi.setApiKey(apiKey);
-    const summoner = await riotApi.getSummonerByName(summonerName, region);
-
-    // Use the Riot ID format if available from the API response
-    let finalSummonerName = summonerName;
-    if (summoner.summonerName) {
-      finalSummonerName = summoner.summonerName; // This will be "gameName#tagLine" for Riot IDs
-    }
+    const summoner = await riotApi.getSummonerByRiotId(username, tagLine, region);
 
     const config = {
       puuid: summoner.puuid,
-      summoner_name: finalSummonerName,
+      username: summoner.username,
+      tag_line: summoner.tagLine,
       region: region,
       riot_api_key: apiKey
     };
@@ -800,9 +805,9 @@ ipcMain.handle('get-lobby-players', async () => {
   }
 });
 
-ipcMain.handle('get-player-history', async (event, summonerName) => {
+ipcMain.handle('get-player-history', async (event, username, tagLine, puuid = null) => {
   try {
-    const history = db.getPlayerHistory(summonerName);
+    const history = db.getPlayerHistory(username, tagLine, puuid);
     return { success: true, history };
   } catch (error) {
     return { success: false, error: error.message };
@@ -813,7 +818,7 @@ ipcMain.handle('analyze-lobby', async () => {
   try {
     // Check if user config exists
     const config = db.getUserConfig();
-    if (!config || !config.summoner_name) {
+    if (!config || !config.username) {
       return {
         success: false,
         error: 'No summoner configured. Please configure your settings first.'
@@ -824,19 +829,19 @@ ipcMain.handle('analyze-lobby', async () => {
     const lobbyPlayers = await lcuConnector.getLobbyPlayers();
 
     console.log('=== LOBBY ANALYSIS DEBUG ===');
-    console.log('Your summoner name:', config.summoner_name);
-    console.log('Lobby players:', lobbyPlayers.map(p => p.summonerName));
+    console.log('Your summoner name:', formatRiotId(config.username, config.tag_line));
+    console.log('Lobby players:', lobbyPlayers.map(p => formatRiotId(p.username, p.tagLine)));
 
     const analysis = [];
     for (const player of lobbyPlayers) {
       if (isCurrentUser(player, config)) {
-        console.log(`Skipping self in analysis: ${player.summonerName}`);
+        console.log(`Skipping self in analysis: ${formatRiotId(player.username, player.tagLine)}`);
         continue;
       }
-      console.log(`Checking history for: ${player.summonerName}`);
+      console.log(`Checking history for: ${formatRiotId(player.username, player.tagLine)}`);
       console.log(`  LCU PUUID: ${player.puuid}`);
       // Note: Match API and LCU return different PUUID formats, so we must use name matching
-      const history = db.getPlayerHistory(player.summonerName, null);
+      const history = db.getPlayerHistory(player.username, player.tagLine, null);
       console.log(`  Found ${history.games.length} games`);
       if (history.games.length > 0 && history.stats) {
         // Transform games to include isAlly flag
@@ -855,7 +860,8 @@ ipcMain.handle('analyze-lobby', async () => {
         }));
 
         analysis.push({
-          player: player.summonerName,
+          username: player.username,
+          tagLine: player.tagLine,
           puuid: player.puuid,
           source: player.source,
           encounterCount: history.stats.totalGames,
@@ -896,35 +902,37 @@ ipcMain.handle('analyze-lobby', async () => {
 // Helper function to analyze lobby players
 async function analyzeLobbyPlayers(lobbyPlayers) {
   const config = db.getUserConfig();
-  if (!config || !config.summoner_name) {
+  if (!config || !config.username) {
     console.log('⚠️  Cannot analyze: No user configuration found. Please configure your summoner name in Settings.');
     return;
   }
 
-  console.log('Lobby players:', lobbyPlayers.map(p => p.summonerName));
-  console.log('Your summoner name (from config):', config.summoner_name);
+  console.log('Lobby players:', lobbyPlayers.map(p => formatRiotId(p.username, p.tagLine)));
+  console.log('Your summoner name (from config):', formatRiotId(config.username, config.tag_line));
 
   // Cache live skin selections so match imports can persist skin IDs
+  // Don't clear cache - merge with existing to preserve skins across state transitions
   if (db?.setLiveSkinSelections) {
-    db.setLiveSkinSelections(lobbyPlayers);
+    db.setLiveSkinSelections(lobbyPlayers, false); // clearFirst=false to merge
   }
 
   const analysis = [];
 
   for (const player of lobbyPlayers) {
     if (isCurrentUser(player, config)) {
-      console.log(`Skipping self in background analysis: ${player.summonerName}`);
+      console.log(`Skipping self in background analysis: ${formatRiotId(player.username, player.tagLine)}`);
       continue;
     }
-    console.log(`Checking history for: ${player.summonerName}`);
+    console.log(`Checking history for: ${formatRiotId(player.username, player.tagLine)}`);
     // Prefer PUUID (more reliable) and fall back to name matching
-    const history = db.getPlayerHistory(player.summonerName, player.puuid || null);
+    const history = db.getPlayerHistory(player.username, player.tagLine, player.puuid || null);
     console.log(`  Found ${history.games.length} games`);
     // Persist latest cosmetics
     try {
       db.savePlayer(
         player.puuid,
-        player.summonerName,
+        player.username,
+        player.tagLine,
         config.region,
         player.profileIconId || null
       );
@@ -948,7 +956,8 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
       }));
 
       analysis.push({
-        player: player.summonerName,
+        username: player.username,
+        tagLine: player.tagLine,
         puuid: player.puuid,
         source: player.source,
         encounterCount: history.stats.totalGames,
@@ -1058,6 +1067,11 @@ async function startGameflowMonitor() {
           // Waiting for champion select - clear any previous analysis
           lastAnalyzedPlayers = null;
           gameImported = false; // Reset import flag when entering new lobby
+          // Clear skin cache when starting a new lobby (not just state transitions within same game)
+          if (currentGameflowState === 'Lobby' && db?.setLiveSkinSelections) {
+            db.setLiveSkinSelections([], true); // clearFirst=true for new lobby
+            console.log('  [Skin Cache] Cleared for new lobby');
+          }
           if (mainWindow && !mainWindow.isDestroyed()) {
             const queueId = gameflowSession?.queue?.id || gameflowSession?.gameData?.queue?.id || 0;
             const queueName = getQueueName(queueId);
@@ -1084,8 +1098,8 @@ async function startGameflowMonitor() {
           const isAnonymized = ANONYMIZED_QUEUES.includes(queueId);
 
           const lobbyPlayers = await lcuConnector.getLobbyPlayers();
-          const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || p.summonerName).sort());
-          const hasIdentifiablePlayers = lobbyPlayers.some(p => p.puuid || p.summonerName);
+          const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
+          const hasIdentifiablePlayers = lobbyPlayers.some(p => p.puuid || (p.username && p.tagLine));
 
           if (hasIdentifiablePlayers && playerHash !== lastAnalyzedPlayers) {
             lastAnalyzedPlayers = playerHash;
@@ -1113,7 +1127,7 @@ async function startGameflowMonitor() {
           if (!lastAnalyzedPlayers) {
             console.log('=== ANALYZING LOBBY (InProgress - Ranked) ===');
             const lobbyPlayers = await lcuConnector.getLobbyPlayers();
-            const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || p.summonerName).sort());
+            const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
             lastAnalyzedPlayers = playerHash;
             await analyzeLobbyPlayers(lobbyPlayers);
           }
@@ -1203,7 +1217,7 @@ async function startGameflowMonitor() {
           if (!lastAnalyzedPlayers) {
             try {
               const lobbyPlayers = await lcuConnector.getLobbyPlayers();
-              const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || p.summonerName).sort());
+              const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
               lastAnalyzedPlayers = playerHash;
               console.log('=== ANALYZING LOBBY (Reconnect) ===');
               await analyzeLobbyPlayers(lobbyPlayers);
@@ -1257,9 +1271,9 @@ ipcMain.handle('stop-auto-monitor', async () => {
 
 // ========== Player Tagging IPC Handlers ==========
 
-ipcMain.handle('add-player-tag', async (event, puuid, summonerName, tagType, note) => {
+ipcMain.handle('add-player-tag', async (event, puuid, username, tagLine, tagType, note) => {
   try {
-    db.addPlayerTag(puuid, summonerName, tagType, note);
+    db.addPlayerTag(puuid, username, tagLine, tagType, note);
     return { success: true, message: 'Tag added successfully' };
   } catch (error) {
     console.error('Failed to add player tag:', error);

@@ -24,7 +24,8 @@ interface PlayerTagMenuProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   puuid: string
-  summonerName: string
+  username: string
+  tagLine: string
   existingTags: PlayerTag[]
   onTagsUpdated: () => void
 }
@@ -64,10 +65,12 @@ export function PlayerTagMenu({
   open,
   onOpenChange,
   puuid,
-  summonerName,
+  username,
+  tagLine,
   existingTags,
   onTagsUpdated
 }: PlayerTagMenuProps) {
+  const summonerName = `${username}#${tagLine}`
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
   const [notes, setNotes] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -125,7 +128,7 @@ export function PlayerTagMenu({
       // Add or update selected tags
       for (const tagType of selectedTags) {
         const note = notes[tagType] || null
-        await window.api.addPlayerTag(puuid, summonerName, tagType, note)
+        await window.api.addPlayerTag(puuid, username, tagLine, tagType, note)
       }
 
       onTagsUpdated()

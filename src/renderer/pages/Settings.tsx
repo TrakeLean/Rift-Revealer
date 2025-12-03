@@ -12,7 +12,8 @@ interface SettingsProps {
 
 export function Settings({ onConfigSaved }: SettingsProps) {
   const [config, setConfig] = useState<UserConfig>({
-    summoner_name: '',
+    username: '',
+    tag_line: '',
     region: 'na1',
     riot_api_key: '',
   })
@@ -177,8 +178,13 @@ export function Settings({ onConfigSaved }: SettingsProps) {
   }
 
   const handleSave = async () => {
-    if (!config.summoner_name.trim()) {
-      setStatus({ message: 'Summoner name is required', type: 'error' })
+    if (!config.username.trim()) {
+      setStatus({ message: 'Username is required', type: 'error' })
+      return
+    }
+
+    if (!config.tag_line.trim()) {
+      setStatus({ message: 'Tag line is required', type: 'error' })
       return
     }
 
@@ -192,7 +198,8 @@ export function Settings({ onConfigSaved }: SettingsProps) {
 
     try {
       const result = await window.api.validateAndSaveConfig(
-        config.summoner_name,
+        config.username,
+        config.tag_line,
         config.region,
         config.riot_api_key
       )
@@ -254,20 +261,39 @@ export function Settings({ onConfigSaved }: SettingsProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Summoner Name */}
+          {/* Username */}
           <div className="space-y-2">
-            <label htmlFor="summonerName" className="text-sm font-medium">
-              Summoner Name
+            <label htmlFor="username" className="text-sm font-medium">
+              Riot ID Username
             </label>
             <input
-              id="summonerName"
+              id="username"
               type="text"
-              value={config.summoner_name}
-              onChange={(e) => setConfig({ ...config, summoner_name: e.target.value })}
+              value={config.username}
+              onChange={(e) => setConfig({ ...config, username: e.target.value })}
               className="w-full px-4 py-2 bg-muted border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
-              placeholder="Enter your summoner name"
+              placeholder="YourUsername"
               disabled={isLoading || isSaving}
             />
+          </div>
+
+          {/* Tag Line */}
+          <div className="space-y-2">
+            <label htmlFor="tagLine" className="text-sm font-medium">
+              Riot ID Tag
+            </label>
+            <input
+              id="tagLine"
+              type="text"
+              value={config.tag_line}
+              onChange={(e) => setConfig({ ...config, tag_line: e.target.value })}
+              className="w-full px-4 py-2 bg-muted border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
+              placeholder="NA1"
+              disabled={isLoading || isSaving}
+            />
+            <p className="text-xs text-muted-foreground">
+              Your complete Riot ID is: <span className="font-semibold">{config.username}#{config.tag_line}</span>
+            </p>
           </div>
 
           {/* Region */}

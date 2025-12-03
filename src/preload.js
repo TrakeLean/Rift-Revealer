@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   getUserConfig: () => ipcRenderer.invoke('get-user-config'),
   saveUserConfig: (config) => ipcRenderer.invoke('save-user-config', config),
-  validateAndSaveConfig: (summonerName, region, apiKey) => ipcRenderer.invoke('validate-and-save-config', summonerName, region, apiKey),
+  validateAndSaveConfig: (username, tagLine, region, apiKey) => ipcRenderer.invoke('validate-and-save-config', username, tagLine, region, apiKey),
   importMatchHistory: () => ipcRenderer.invoke('import-match-history'),
   connectLCU: () => ipcRenderer.invoke('connect-lcu'),
   getSkinImage: (skinId, championId) => ipcRenderer.invoke('get-skin-image', skinId, championId),
@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   clearSkinCache: () => ipcRenderer.invoke('clear-skin-cache'),
   getSkinCacheInfo: () => ipcRenderer.invoke('get-skin-cache-info'),
   getLobbyPlayers: () => ipcRenderer.invoke('get-lobby-players'),
-  getPlayerHistory: (summonerName) => ipcRenderer.invoke('get-player-history', summonerName),
+  getPlayerHistory: (username, tagLine, puuid) => ipcRenderer.invoke('get-player-history', username, tagLine, puuid),
   analyzeLobby: () => ipcRenderer.invoke('analyze-lobby'),
   startAutoMonitor: () => ipcRenderer.invoke('start-auto-monitor'),
   stopAutoMonitor: () => ipcRenderer.invoke('stop-auto-monitor'),
@@ -45,7 +45,7 @@ contextBridge.exposeInMainWorld('api', {
   getLastMatchRoster: () => ipcRenderer.invoke('get-last-match-roster'),
 
   // Player tagging API
-  addPlayerTag: (puuid, summonerName, tagType, note) => ipcRenderer.invoke('add-player-tag', puuid, summonerName, tagType, note),
+  addPlayerTag: (puuid, username, tagLine, tagType, note) => ipcRenderer.invoke('add-player-tag', puuid, username, tagLine, tagType, note),
   removePlayerTag: (puuid, tagType) => ipcRenderer.invoke('remove-player-tag', puuid, tagType),
   removeAllPlayerTags: (puuid) => ipcRenderer.invoke('remove-all-player-tags', puuid),
   getPlayerTags: (puuid) => ipcRenderer.invoke('get-player-tags', puuid),

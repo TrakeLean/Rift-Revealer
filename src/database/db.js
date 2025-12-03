@@ -3,19 +3,51 @@ const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
 
-function normalizeRiotName(name) {
-  if (!name) return { full: '', game: '' };
-  const cleaned = name.trim().toLowerCase().replace(/\s+/g, '');
-  const [game] = cleaned.split('#');
-  return { full: cleaned, game };
+// Helper: Format display name from username and tag_line
+function formatRiotId(username, tagLine) {
+  if (!username) return 'Unknown';
+  if (!tagLine) return username;
+  return `${username}#${tagLine}`;
 }
 
-function isConfiguredUser(config, puuid, summonerName) {
+// Helper: Parse Riot ID string into components
+function parseRiotId(fullName) {
+  if (!fullName || typeof fullName !== 'string') {
+    return { username: null, tagLine: null };
+  }
+  const trimmed = fullName.trim();
+  if (trimmed.includes('#')) {
+    const [username, tagLine] = trimmed.split('#').map(s => s.trim());
+    return { username: username || null, tagLine: tagLine || null };
+  }
+  // Legacy name without tag or just username
+  return { username: trimmed, tagLine: null };
+}
+
+// Helper: Normalize for comparison (case-insensitive, no spaces)
+function normalizeForComparison(str) {
+  if (!str) return '';
+  return str.trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function isConfiguredUser(config, puuid, username, tagLine) {
   if (!config) return false;
   if (config.puuid && puuid && config.puuid === puuid) return true;
-  const playerName = normalizeRiotName(summonerName);
-  const configName = normalizeRiotName(config.summoner_name);
-  return playerName.full === configName.full || playerName.game === configName.game;
+  if (!config.username || !username) return false;
+
+  const configUserNorm = normalizeForComparison(config.username);
+  const playerUserNorm = normalizeForComparison(username);
+
+  // Match if usernames match
+  if (configUserNorm === playerUserNorm) {
+    // Exact tag match (if both present)
+    if (config.tag_line && tagLine) {
+      return normalizeForComparison(config.tag_line) === normalizeForComparison(tagLine);
+    }
+    // If no tag info, match on username alone
+    return true;
+  }
+  return false;
 }
 
 class DatabaseManager {
@@ -38,8 +70,11 @@ class DatabaseManager {
     this.db.pragma('journal_mode = WAL');
     console.log('Database opened successfully');
 
-    // In-memory cache of live skin selections (puuid -> { skinId, championId })
-    this.liveSkinSelections = new Map();
+    // In-memory cache of live skin selections (by puuid and normalized name)
+    this.liveSkinSelections = {
+      puuid: new Map(),
+      name: new Map()
+    };
   }
 
   initialize() {
@@ -56,172 +91,8 @@ class DatabaseManager {
   }
 
   runMigrations() {
-    const ensureColumn = (table, column, definition) => {
-      const info = this.db.prepare(`PRAGMA table_info(${table})`).all();
-      const exists = info.some(col => col.name === column);
-      if (!exists) {
-        console.log(`Running migration: Adding ${column} to ${table}`);
-        this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
-      }
-    };
-
-    // Disable foreign keys during destructive migrations to avoid intermediate violations
-    this.db.exec('PRAGMA foreign_keys = OFF');
-    try {
-      // Migrate user_config to single-row unique table
-      const userInfo = this.db.prepare("PRAGMA table_info(user_config)").all();
-      const userCountRow = this.db.prepare('SELECT COUNT(*) as cnt FROM user_config').get() || { cnt: 0 };
-      const needsUserMigration =
-        userInfo.some(col => col.name === 'id' && col.pk !== 1) ||
-      userInfo.some(col => col.name === 'puuid' && !col.notnull) ||
-      !userInfo.some(col => col.name === 'auto_update_check') ||
-      !userInfo.some(col => col.name === 'auto_start') ||
-      userCountRow.cnt !== 1;
-    if (needsUserMigration) {
-      console.log('Running migration: Rebuilding user_config table');
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS user_config_new (
-          id INTEGER PRIMARY KEY CHECK(id = 1),
-          puuid TEXT NOT NULL UNIQUE,
-          summoner_name TEXT NOT NULL,
-          region TEXT NOT NULL,
-          riot_api_key TEXT,
-          last_updated INTEGER,
-          auto_update_check INTEGER DEFAULT 1,
-          auto_start INTEGER DEFAULT 0
-        )
-      `);
-      let latest = null;
-      try {
-        latest = this.db.prepare(`
-          SELECT puuid, summoner_name, region, riot_api_key, last_updated, auto_update_check, auto_start
-          FROM user_config
-          ORDER BY last_updated DESC
-          LIMIT 1
-        `).get();
-      } catch (err) {
-        // older schema without columns; fetch what we can
-        try {
-          latest = this.db.prepare(`
-            SELECT puuid, summoner_name, region, riot_api_key, last_updated
-            FROM user_config
-            ORDER BY last_updated DESC
-            LIMIT 1
-          `).get();
-        } catch (_) {
-          latest = null;
-        }
-      }
-      if (latest) {
-        this.db.prepare(`
-          INSERT OR REPLACE INTO user_config_new
-            (id, puuid, summoner_name, region, riot_api_key, last_updated, auto_update_check, auto_start)
-          VALUES (1, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          latest.puuid,
-          latest.summoner_name,
-          latest.region,
-          latest.riot_api_key,
-          latest.last_updated || Date.now(),
-          latest.auto_update_check ?? 1,
-          latest.auto_start ?? 0
-        );
-      }
-      this.db.exec('DROP TABLE user_config');
-      this.db.exec('ALTER TABLE user_config_new RENAME TO user_config');
-    }
-
-    // Migrate players table to drop skin_id
-    const playersInfo = this.db.prepare("PRAGMA table_info(players)").all();
-    const hasSkinInPlayers = playersInfo.some(col => col.name === 'skin_id');
-    if (hasSkinInPlayers) {
-      console.log('Running migration: Rebuilding players table without skin_id');
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS players_new (
-          puuid TEXT PRIMARY KEY,
-          summoner_name TEXT NOT NULL,
-          region TEXT NOT NULL,
-          last_seen INTEGER,
-          profile_icon_id INTEGER
-        )
-      `);
-      this.db.exec(`
-        INSERT OR IGNORE INTO players_new (puuid, summoner_name, region, last_seen, profile_icon_id)
-        SELECT puuid, summoner_name, region, last_seen, profile_icon_id FROM players
-      `);
-      this.db.exec('DROP TABLE players');
-      this.db.exec('ALTER TABLE players_new RENAME TO players');
-    }
-
-    // Rebuild players table if legacy last_skin_id column exists
-    const playersInfoLatest = this.db.prepare("PRAGMA table_info(players)").all();
-    const hasLastSkin = playersInfoLatest.some(col => col.name === 'last_skin_id');
-    if (hasLastSkin) {
-      console.log('Running migration: Rebuilding players table without last_skin_id');
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS players_new (
-          puuid TEXT PRIMARY KEY,
-          summoner_name TEXT NOT NULL,
-          region TEXT NOT NULL,
-          last_seen INTEGER,
-          profile_icon_id INTEGER
-        )
-      `);
-      this.db.exec(`
-        INSERT OR IGNORE INTO players_new (puuid, summoner_name, region, last_seen, profile_icon_id)
-        SELECT puuid, summoner_name, region, last_seen, profile_icon_id FROM players
-      `);
-      this.db.exec('DROP TABLE players');
-      this.db.exec('ALTER TABLE players_new RENAME TO players');
-    }
-
-    // Migrate match_participants to drop unused columns and add skin_id
-    const participantsInfo = this.db.prepare("PRAGMA table_info(match_participants)").all();
-    const removedCols = ['profile_icon_id', 'role', 'team_position', 'gold_earned', 'total_minions_killed', 'total_damage_to_champions'];
-    const needsParticipantMigration = participantsInfo.some(col => removedCols.includes(col.name));
-    const hasSkinId = participantsInfo.some(col => col.name === 'skin_id');
-    if (!hasSkinId) {
-      console.log('Running migration: Adding skin_id to match_participants');
-      this.db.exec(`ALTER TABLE match_participants ADD COLUMN skin_id INTEGER`);
-    }
-    // Ensure column remains if above failed previously
-    ensureColumn('match_participants', 'skin_id', 'INTEGER');
-    if (needsParticipantMigration) {
-      console.log('Running migration: Rebuilding match_participants without unused columns');
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS match_participants_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          match_id TEXT NOT NULL,
-          puuid TEXT NOT NULL,
-          summoner_name TEXT,
-          champion_name TEXT,
-          champion_id INTEGER,
-          skin_id INTEGER,
-          team_id INTEGER,
-          kills INTEGER,
-          deaths INTEGER,
-          assists INTEGER,
-          win INTEGER,
-          lane TEXT,
-          FOREIGN KEY (match_id) REFERENCES matches(match_id),
-          FOREIGN KEY (puuid) REFERENCES players(puuid)
-        )
-      `);
-      this.db.exec(`
-        INSERT INTO match_participants_new (
-          match_id, puuid, summoner_name, champion_name, champion_id, skin_id, team_id,
-          kills, deaths, assists, win, lane
-        )
-        SELECT
-          match_id, puuid, summoner_name, champion_name, champion_id, NULL as skin_id, team_id,
-          kills, deaths, assists, win, lane
-        FROM match_participants
-      `);
-      this.db.exec('DROP TABLE match_participants');
-      this.db.exec('ALTER TABLE match_participants_new RENAME TO match_participants');
-    }
-
-    // Skin cache table for fetched skin assets
+    // NOTE: Since you deleted the database, migrations are simplified
+    // Just create skin_cache table if missing
     const hasSkinCache = this.db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='skin_cache'`).get();
     if (!hasSkinCache) {
       console.log('Running migration: Creating skin_cache table');
@@ -235,19 +106,7 @@ class DatabaseManager {
       `);
     }
 
-    // Recreate key indexes (safe to re-run)
-    this.db.exec(`
-      CREATE INDEX IF NOT EXISTS idx_participants_match ON match_participants(match_id);
-      CREATE INDEX IF NOT EXISTS idx_participants_puuid ON match_participants(puuid);
-      CREATE INDEX IF NOT EXISTS idx_matches_creation ON matches(game_creation);
-      CREATE INDEX IF NOT EXISTS idx_players_name ON players(summoner_name);
-      CREATE INDEX IF NOT EXISTS idx_player_tags_puuid ON player_tags(puuid);
-    `);
-
     console.log('Database migrations completed');
-    } finally {
-      this.db.exec('PRAGMA foreign_keys = ON');
-    }
   }
 
   getUserConfig() {
@@ -257,12 +116,13 @@ class DatabaseManager {
 
   saveUserConfig(config) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO user_config (id, puuid, summoner_name, region, riot_api_key, last_updated, auto_update_check, auto_start)
-      VALUES (1, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 0))
+      INSERT OR REPLACE INTO user_config (id, puuid, username, tag_line, region, riot_api_key, last_updated, auto_update_check, auto_start)
+      VALUES (1, ?, ?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 0))
     `);
     return stmt.run(
       config.puuid,
-      config.summoner_name,
+      config.username,
+      config.tag_line,
       config.region,
       config.riot_api_key,
       Date.now(),
@@ -271,33 +131,65 @@ class DatabaseManager {
     );
   }
 
-  savePlayer(puuid, summonerName, region, profileIconId = null) {
+  savePlayer(puuid, username, tagLine, region, profileIconId = null) {
     const stmt = this.db.prepare(`
-      INSERT INTO players (puuid, summoner_name, region, last_seen, profile_icon_id)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO players (puuid, username, tag_line, region, last_seen, profile_icon_id)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(puuid) DO UPDATE SET
-        summoner_name = excluded.summoner_name,
+        username = excluded.username,
+        tag_line = excluded.tag_line,
         region = excluded.region,
         last_seen = excluded.last_seen,
         profile_icon_id = excluded.profile_icon_id
     `);
-    return stmt.run(puuid, summonerName, region, Date.now(), profileIconId);
+    return stmt.run(puuid, username, tagLine, region, Date.now(), profileIconId);
   }
 
-  setLiveSkinSelections(players = []) {
+  setLiveSkinSelections(players = [], clearFirst = false) {
     try {
-      this.liveSkinSelections.clear();
+      // Only clear cache if explicitly requested (e.g., new lobby started)
+      // Otherwise, merge new data with existing cache to preserve skins across state transitions
+      if (clearFirst) {
+        this.liveSkinSelections.puuid.clear();
+        this.liveSkinSelections.name.clear();
+        console.log('  [Skin Cache] Cleared cache (clearFirst=true)');
+      }
+
+      let added = 0;
       players.forEach((p) => {
-        if (p && p.puuid && p.skinId !== undefined && p.skinId !== null) {
-          this.liveSkinSelections.set(p.puuid, {
-            skinId: p.skinId,
-            championId: p.championId ?? null
-          });
+        if (!p || p.skinId === undefined || p.skinId === null) return;
+        const entry = { skinId: p.skinId, championId: p.championId ?? null };
+
+        if (p.puuid) {
+          this.liveSkinSelections.puuid.set(p.puuid, entry);
+          added++;
+        }
+        if (p.username && p.tagLine) {
+          const fullName = formatRiotId(p.username, p.tagLine);
+          const norm = normalizeForComparison(fullName);
+          if (norm) {
+            this.liveSkinSelections.name.set(norm, entry);
+          }
         }
       });
+
+      console.log(`  [Skin Cache] Added ${added} skin(s), total cached: ${this.liveSkinSelections.puuid.size} by PUUID, ${this.liveSkinSelections.name.size} by name`);
     } catch (err) {
       console.warn('Failed to cache live skin selections:', err.message);
     }
+  }
+
+  getLiveSkinSelection(puuid, username, tagLine) {
+    // Try Riot match PUUID then fallback to normalized name (handles LCU PUUID mismatch)
+    if (puuid && this.liveSkinSelections.puuid.has(puuid)) {
+      return this.liveSkinSelections.puuid.get(puuid);
+    }
+    const fullName = formatRiotId(username, tagLine);
+    const norm = normalizeForComparison(fullName);
+    if (norm && this.liveSkinSelections.name.has(norm)) {
+      return this.liveSkinSelections.name.get(norm);
+    }
+    return null;
   }
 
   saveMatch(matchData) {
@@ -321,51 +213,21 @@ class DatabaseManager {
     if (matchData.info.participants.length > 0) {
       const first = matchData.info.participants[0];
       console.log('  First participant name data:');
-      console.log('    summonerName:', first.summonerName);
       console.log('    riotIdGameName:', first.riotIdGameName);
       console.log('    riotIdTagline:', first.riotIdTagline);
     }
 
+    // Prepare statement (execution deferred until after role inference)
     const participantStmt = this.db.prepare(`
       INSERT INTO match_participants (
-        match_id, puuid, summoner_name, champion_name, champion_id, skin_id, team_id,
+        match_id, puuid, username, tag_line, champion_name, champion_id, skin_id, team_id,
         kills, deaths, assists, win, lane
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    for (const participant of matchData.info.participants) {
-      // Use Riot ID format (gameName#tagLine) if available
-      let summonerName = null;
-
-      // Priority 1: Use riotIdGameName (this is the modern format)
-      if (participant.riotIdGameName) {
-        // Note: Field is "riotIdTagline" (lowercase), not "riotIdTagLine"!
-        if (participant.riotIdTagline) {
-          summonerName = `${participant.riotIdGameName}#${participant.riotIdTagline}`;
-        } else {
-          // Fallback for edge cases where tagline might be missing
-          summonerName = participant.riotIdGameName;
-        }
-      }
-      // Priority 2: Fall back to legacy summonerName (older accounts)
-      else if (participant.summonerName) {
-        summonerName = participant.summonerName;
-      }
-
-      // Debug logging
-      if (!summonerName) {
-        console.error('⚠️  WARNING: No summoner name found!');
-        console.error('   participant.summonerName:', participant.summonerName);
-        console.error('   participant.riotIdGameName:', participant.riotIdGameName);
-        console.error('   participant.riotIdTagline:', participant.riotIdTagline);
-        console.error('   participant.puuid:', participant.puuid);
-      }
-
-      const profileIconId = participant.profileIconId ?? participant.profileIcon ?? null; // Riot match API uses profileIcon
-      this.savePlayer(participant.puuid, summonerName, matchData.info.platformId, profileIconId);
-
-      // Prefer Riot's role fields in this order to better reflect the role queued: teamPosition -> individualPosition -> role -> lane
-      const lane =
+    // Helper: normalize role to canonical slots
+    const normalizeRole = (participant) => {
+      const raw =
         (participant.teamPosition ||
           participant.individualPosition ||
           participant.role ||
@@ -373,27 +235,96 @@ class DatabaseManager {
           '')
           .toString()
           .toUpperCase()
-          .trim() || null;
+          .trim();
 
-      // Prefer live skin selection (captured from champ select / gameflow) when match data lacks skin info
-      const liveSkin = this.liveSkinSelections.get(participant.puuid);
+      if (!raw || raw === 'INVALID') return 'UNKNOWN';
+      if (['TOP'].includes(raw)) return 'TOP';
+      if (['JUNGLE', 'JUNG', 'JG'].includes(raw)) return 'JUNGLE';
+      if (['MIDDLE', 'MID', 'MIDL'].includes(raw)) return 'MIDDLE';
+      if (['BOTTOM', 'BOT', 'ADC', 'DUO_CARRY', 'DUO'].includes(raw)) return 'BOTTOM';
+      if (['UTILITY', 'SUPPORT', 'SUP', 'DUO_SUPPORT'].includes(raw)) return 'SUPPORT';
+      return raw; // Keep unexpected but non-empty values for visibility
+    };
+
+    const processedParticipants = [];
+
+    for (const participant of matchData.info.participants) {
+      // Use Riot ID format (username#tagLine)
+      let username = null;
+      let tagLine = null;
+
+      // Priority 1: Use riotIdGameName (this is the modern format)
+      if (participant.riotIdGameName) {
+        username = participant.riotIdGameName;
+        tagLine = participant.riotIdTagline || null;
+      }
+
+      // Debug logging
+      if (!username) {
+        console.error('⚠️  WARNING: No username found!');
+        console.error('   participant.riotIdGameName:', participant.riotIdGameName);
+        console.error('   participant.riotIdTagline:', participant.riotIdTagline);
+        console.error('   participant.puuid:', participant.puuid);
+      }
+
+      const profileIconId = participant.profileIcon || participant.profileIconId || null;
+      this.savePlayer(participant.puuid, username, tagLine, matchData.info.platformId, profileIconId);
+
+      // Prefer live skin selection (captured from champ select / gameflow) when match data lacks skin info.
+      // Riot match API PUUIDs can differ from LCU PUUIDs, so also fall back to name-based lookup.
+      const liveSkin = this.getLiveSkinSelection(participant.puuid, username, tagLine);
       const resolvedSkinId =
         participant.skinId ??
         (liveSkin && (liveSkin.championId === null || liveSkin.championId === participant.championId) ? liveSkin.skinId : null);
 
+      const lane = normalizeRole(participant);
+
+      processedParticipants.push({
+        participant,
+        username,
+        tagLine,
+        resolvedSkinId,
+        lane
+      });
+    }
+
+    // Infer missing/invalid roles per team for SR-style queues
+    const expectedRoles = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'];
+    const byTeam = new Map();
+    for (const p of processedParticipants) {
+      const team = p.participant.teamId ?? 0;
+      if (!byTeam.has(team)) byTeam.set(team, []);
+      byTeam.get(team).push(p);
+    }
+
+    for (const [teamId, players] of byTeam.entries()) {
+      const present = new Set(players.map(p => p.lane).filter(r => r && r !== 'UNKNOWN'));
+      const missing = expectedRoles.filter(r => !present.has(r));
+      const unknowns = players.filter(p => !p.lane || p.lane === 'UNKNOWN');
+      for (const u of unknowns) {
+        const next = missing.shift();
+        if (next) {
+          u.lane = next;
+        }
+      }
+    }
+
+    // Persist participants after role inference
+    for (const p of processedParticipants) {
       participantStmt.run(
         matchData.metadata.matchId,
-        participant.puuid,
-        summonerName,
-        participant.championName,
-        participant.championId,
-        resolvedSkinId ?? null,
-        participant.teamId,
-        participant.kills,
-        participant.deaths,
-        participant.assists,
-        participant.win ? 1 : 0,
-        lane
+        p.participant.puuid,
+        p.username,
+        p.tagLine,
+        p.participant.championName,
+        p.participant.championId,
+        p.resolvedSkinId ?? null,
+        p.participant.teamId,
+        p.participant.kills,
+        p.participant.deaths,
+        p.participant.assists,
+        p.participant.win ? 1 : 0,
+        p.lane
       );
     }
   }
@@ -435,18 +366,15 @@ class DatabaseManager {
     return 'Other';
   }
 
-  getPlayerHistory(summonerName, puuid = null) {
+  getPlayerHistory(username, tagLine, puuid = null) {
     const config = this.getUserConfig();
     if (!config) {
       return { games: [], stats: null };
     }
 
-    // Normalize common Riot ID variations (trim and strip spaces) so we can match "Name#Tag" and "Name #Tag"
-    const trimmedSummoner = summonerName.trim();
-    const rawGameName = trimmedSummoner.split('#')[0];
-    const gameName = rawGameName.trim();
-    const noSpaceSummoner = trimmedSummoner.replace(/\s+/g, '').toLowerCase();
-    const noSpaceGame = gameName.replace(/\s+/g, '').toLowerCase();
+    // Normalize for comparison
+    const usernameNorm = normalizeForComparison(username);
+    const tagLineNorm = normalizeForComparison(tagLine);
 
     // Always start with an empty list; we'll fill it with the first successful query
     let games = [];
@@ -459,27 +387,21 @@ class DatabaseManager {
           m.game_creation,
           m.game_duration,
           m.queue_id,
-          opponent.summoner_name as opponent_name,
-          opponent.lane as opponent_team_position,
+          opponent.username as opponent_username,
+          opponent.tag_line as opponent_tag_line,
           opponent.lane as opponent_lane,
-          opponent.lane as opponent_role,
           opponent.champion_name as opponent_champion,
           opponent.kills as opponent_kills,
           opponent.deaths as opponent_deaths,
           opponent.assists as opponent_assists,
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
-          NULL as opponent_profile_icon,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
           user.assists as user_assists,
           user.win as user_win,
-          user.team_id as user_team,
-          0 as user_damage,
-          0 as opponent_damage,
-          0 as user_cs,
-          0 as opponent_cs
+          user.team_id as user_team
         FROM matches m
         INNER JOIN match_participants user ON m.match_id = user.match_id AND user.puuid = ?
         INNER JOIN match_participants opponent ON m.match_id = opponent.match_id
@@ -493,17 +415,17 @@ class DatabaseManager {
     }
 
     // Priority 2: Fallback to name matching (PUUIDs can occasionally differ between LCU and Match API)
-    if ((!games || games.length === 0) && summonerName) {
-      console.log(`  DB Query: Searching for "${summonerName}" or "${gameName}" (PUUID lookup empty)`);
+    if ((!games || games.length === 0) && username) {
+      console.log(`  DB Query: Searching for "${username}#${tagLine || ''}" (PUUID lookup empty)`);
 
       // Debug: Check what names are in the database
       const checkStmt = this.db.prepare(`
-        SELECT DISTINCT summoner_name FROM match_participants
-        WHERE LOWER(summoner_name) LIKE LOWER(?)
+        SELECT DISTINCT username, tag_line FROM match_participants
+        WHERE LOWER(REPLACE(username, ' ', '')) LIKE LOWER(?)
         LIMIT 5
       `);
-      const matchingNames = checkStmt.all(`%${gameName}%`);
-      console.log(`  Found similar names in DB:`, matchingNames.map(n => n.summoner_name));
+      const matchingNames = checkStmt.all(`%${usernameNorm}%`);
+      console.log(`  Found similar names in DB:`, matchingNames.map(n => formatRiotId(n.username, n.tag_line)));
 
       const gamesStmt = this.db.prepare(`
         SELECT DISTINCT
@@ -511,54 +433,42 @@ class DatabaseManager {
           m.game_creation,
           m.game_duration,
           m.queue_id,
-          opponent.summoner_name as opponent_name,
-          opponent.lane as opponent_team_position,
+          opponent.username as opponent_username,
+          opponent.tag_line as opponent_tag_line,
           opponent.lane as opponent_lane,
-          opponent.lane as opponent_role,
           opponent.champion_name as opponent_champion,
           opponent.kills as opponent_kills,
           opponent.deaths as opponent_deaths,
           opponent.assists as opponent_assists,
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
-          NULL as opponent_profile_icon,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
           user.assists as user_assists,
           user.win as user_win,
-          user.team_id as user_team,
-          0 as user_damage,
-          0 as opponent_damage,
-          0 as user_cs,
-          0 as opponent_cs
+          user.team_id as user_team
         FROM matches m
         INNER JOIN match_participants user ON m.match_id = user.match_id AND user.puuid = ?
         INNER JOIN match_participants opponent ON m.match_id = opponent.match_id
           AND (
-            -- Exact match
-            LOWER(opponent.summoner_name) = LOWER(?)
-            OR LOWER(TRIM(opponent.summoner_name)) = LOWER(?)
-            -- Ignore spaces inside the Riot ID (e.g., "Name #Tag" vs "Name#Tag")
-            OR LOWER(REPLACE(opponent.summoner_name, ' ', '')) = ?
-            -- Match on game name portion with or without spaces
-            OR LOWER(opponent.summoner_name) LIKE LOWER(? || '#%')
-            OR LOWER(REPLACE(opponent.summoner_name, ' ', '')) LIKE LOWER(? || '#%')
+            -- Exact username match (case-insensitive, no spaces)
+            LOWER(REPLACE(opponent.username, ' ', '')) = ?
+            -- Also match tagline if provided
+            ${tagLine ? 'AND LOWER(REPLACE(opponent.tag_line, ' ', '')) = ?' : ''}
           )
           AND opponent.puuid != ?
         WHERE m.game_creation < (strftime('%s', 'now') - 1800) * 1000
         ORDER BY m.game_creation DESC
       `);
 
-      games = gamesStmt.all(
-        config.puuid,
-        trimmedSummoner,
-        trimmedSummoner,
-        noSpaceSummoner,
-        gameName,
-        noSpaceGame,
-        config.puuid
-      );
+      const params = [config.puuid, usernameNorm];
+      if (tagLine) {
+        params.push(tagLineNorm);
+      }
+      params.push(config.puuid);
+
+      games = gamesStmt.all(...params);
     }
 
     if (games.length === 0) {
@@ -632,23 +542,15 @@ class DatabaseManager {
       const roleMap = {};
 
       gamesList.forEach(g => {
-        const rawRole = (
-          g.opponent_team_position ||
-          g.opponent_lane ||
-          g.opponent_role ||
-          ''
-        ).toUpperCase();
+        const rawRole = (g.opponent_lane || '').toUpperCase();
         // Normalize Riot role strings into friendlier labels
         const role = {
           JUNGLE: 'Jungle',
-          JG: 'Jungle',
           TOP: 'Top',
           MIDDLE: 'Mid',
           MID: 'Mid',
           BOTTOM: 'ADC',
           ADC: 'ADC',
-          DUO_CARRY: 'ADC',
-          UTILITY: 'Support',
           SUPPORT: 'Support',
         }[rawRole] || 'Unknown';
 
@@ -752,13 +654,10 @@ class DatabaseManager {
     const lastSeen = {
       timestamp: new Date(lastGame.game_creation),
       champion: lastGame.opponent_champion,
-      role: lastGame.opponent_team_position || lastGame.opponent_lane || null,
+      role: lastGame.opponent_lane || null,
       outcome: lastGame.user_win === 1 ? 'win' : 'loss',
       isAlly
     };
-
-    // Get profile icon from most recent game
-    const profileIconId = lastGame.opponent_profile_icon || null;
 
     // Calculate mode-specific stats
     const byMode = {};
@@ -793,8 +692,7 @@ class DatabaseManager {
           lastSeen,
           threatLevel,
           allyQuality,
-          byMode,  // Add mode-specific stats
-          profileIconId  // Add profile icon
+          byMode
         }
       }
     };
@@ -827,7 +725,8 @@ class DatabaseManager {
     const rosterStmt = this.db.prepare(`
       SELECT
         mp.puuid,
-        mp.summoner_name,
+        mp.username,
+        mp.tag_line,
         mp.champion_name,
         mp.champion_id,
         mp.skin_id,
@@ -853,10 +752,10 @@ class DatabaseManager {
       seen.set(key, true);
       playersBase.push({
         puuid: p.puuid,
-        summonerName: p.summoner_name,
+        username: p.username,
+        tagLine: p.tag_line,
         championName: p.champion_name,
         championId: p.champion_id,
-        championName: p.champion_name,
         teamId: p.team_id,
         role: null,
         lane: p.lane,
@@ -868,7 +767,7 @@ class DatabaseManager {
     }
 
     const userTeamId =
-      playersBase.find(p => isConfiguredUser(config, p.puuid, p.summonerName))?.teamId || null;
+      playersBase.find(p => isConfiguredUser(config, p.puuid, p.username, p.tagLine))?.teamId || null;
 
     // Enrich with encounter stats; avoid querying for the configured user
     const players = playersBase.map((p) => {
@@ -884,9 +783,9 @@ class DatabaseManager {
       let byMode = null;
       let gamesTransformed = [];
 
-      if (!isConfiguredUser(config, p.puuid, p.summonerName)) {
+      if (!isConfiguredUser(config, p.puuid, p.username, p.tagLine)) {
         try {
-          const history = this.getPlayerHistory(p.summonerName, p.puuid);
+          const history = this.getPlayerHistory(p.username, p.tagLine, p.puuid);
           if (history && history.stats) {
             encounterCount = history.stats.totalGames || 0;
             const enemyWins = Number(history.stats.asEnemy?.wins || 0);
@@ -905,7 +804,7 @@ class DatabaseManager {
             gamesTransformed = history.games.map(g => ({
               gameId: g.match_id,
               champion: g.opponent_champion,
-              role: g.opponent_team_position || g.opponent_lane || null,
+              role: g.opponent_lane || null,
               outcome: g.user_win === 1 ? 'win' : 'loss',
               kda: {
                 kills: g.opponent_kills,
@@ -951,20 +850,22 @@ class DatabaseManager {
   /**
    * Add or update a tag for a player
    * @param {string} puuid - Player's PUUID
-   * @param {string} summonerName - Player's summoner name
+   * @param {string} username - Player's username
+   * @param {string} tagLine - Player's tag line
    * @param {string} tagType - 'toxic', 'friendly', 'notable', or 'duo'
    * @param {string|null} note - Optional note text
    */
-  addPlayerTag(puuid, summonerName, tagType, note = null) {
+  addPlayerTag(puuid, username, tagLine, tagType, note = null) {
     const stmt = this.db.prepare(`
-      INSERT INTO player_tags (puuid, summoner_name, tag_type, note, created_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO player_tags (puuid, username, tag_line, tag_type, note, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(puuid, tag_type) DO UPDATE SET
-        summoner_name = excluded.summoner_name,
+        username = excluded.username,
+        tag_line = excluded.tag_line,
         note = excluded.note,
         created_at = excluded.created_at
     `);
-    return stmt.run(puuid, summonerName, tagType, note, Date.now());
+    return stmt.run(puuid, username, tagLine, tagType, note, Date.now());
   }
 
   /**
@@ -1008,7 +909,7 @@ class DatabaseManager {
    */
   getAllTaggedPlayers() {
     const stmt = this.db.prepare(`
-      SELECT puuid, summoner_name, tag_type, note, created_at
+      SELECT puuid, username, tag_line, tag_type, note, created_at
       FROM player_tags
       ORDER BY created_at DESC
     `);
@@ -1033,20 +934,10 @@ class DatabaseManager {
    * @param {boolean} enabled
    */
   setAutoUpdateCheck(enabled) {
-    // First ensure the column exists (for existing databases)
-    try {
-      const stmt = this.db.prepare(`
-        UPDATE user_config SET auto_update_check = ? WHERE id = (SELECT id FROM user_config ORDER BY id DESC LIMIT 1)
-      `);
-      stmt.run(enabled ? 1 : 0);
-    } catch (error) {
-      // Column might not exist in old schema, add it
-      this.db.exec('ALTER TABLE user_config ADD COLUMN auto_update_check INTEGER DEFAULT 1');
-      const stmt = this.db.prepare(`
-        UPDATE user_config SET auto_update_check = ? WHERE id = (SELECT id FROM user_config ORDER BY id DESC LIMIT 1)
-      `);
-      stmt.run(enabled ? 1 : 0);
-    }
+    const stmt = this.db.prepare(`
+      UPDATE user_config SET auto_update_check = ? WHERE id = 1
+    `);
+    stmt.run(enabled ? 1 : 0);
   }
 
   /**
@@ -1054,20 +945,10 @@ class DatabaseManager {
    * @param {boolean} enabled
    */
   setAutoStart(enabled) {
-    // First ensure the column exists (for existing databases)
-    try {
-      const stmt = this.db.prepare(`
-        UPDATE user_config SET auto_start = ? WHERE id = (SELECT id FROM user_config ORDER BY id DESC LIMIT 1)
-      `);
-      stmt.run(enabled ? 1 : 0);
-    } catch (error) {
-      // Column might not exist in old schema, add it
-      this.db.exec('ALTER TABLE user_config ADD COLUMN auto_start INTEGER DEFAULT 0');
-      const stmt = this.db.prepare(`
-        UPDATE user_config SET auto_start = ? WHERE id = (SELECT id FROM user_config ORDER BY id DESC LIMIT 1)
-      `);
-      stmt.run(enabled ? 1 : 0);
-    }
+    const stmt = this.db.prepare(`
+      UPDATE user_config SET auto_start = ? WHERE id = 1
+    `);
+    stmt.run(enabled ? 1 : 0);
   }
 
   /**
@@ -1089,3 +970,5 @@ class DatabaseManager {
 }
 
 module.exports = DatabaseManager;
+module.exports.formatRiotId = formatRiotId;
+module.exports.parseRiotId = parseRiotId;

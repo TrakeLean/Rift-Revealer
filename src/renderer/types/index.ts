@@ -1,6 +1,7 @@
 // User Configuration
 export interface UserConfig {
-  summoner_name: string
+  username: string
+  tag_line: string
   region: string
   riot_api_key: string
   puuid?: string
@@ -25,7 +26,8 @@ export interface MatchData {
 
 // Player History
 export interface PlayerHistory {
-  summonerName: string
+  username: string
+  tagLine: string
   encounterCount: number
   wins: number
   losses: number
@@ -34,13 +36,15 @@ export interface PlayerHistory {
 
 // Lobby Player
 export interface LobbyPlayer {
-  summonerName: string
+  username: string
+  tagLine: string
   source: 'championSelect' | 'inGame'
 }
 
 export interface RosterPlayer {
   puuid: string
-  summonerName: string
+  username: string
+  tagLine: string
   championName?: string
   championId?: number
   teamId?: number
@@ -131,7 +135,8 @@ export type GameMode = 'Ranked' | 'Normal' | 'ARAM' | 'Arena' | 'Other'
 
 // Enhanced Analysis Result
 export interface AnalysisResult {
-  player: string
+  username: string
+  tagLine: string
   puuid: string
   source: string
   encounterCount: number
@@ -185,7 +190,8 @@ export interface WindowAPI {
   getUserConfig: () => Promise<UserConfig | null>
   saveUserConfig: (config: UserConfig) => Promise<IPCResponse>
   validateAndSaveConfig: (
-    summonerName: string,
+    username: string,
+    tagLine: string,
     region: string,
     apiKey: string
   ) => Promise<IPCResponse>
@@ -193,7 +199,7 @@ export interface WindowAPI {
   cancelImportMatchHistory: () => void
   connectLCU: () => Promise<IPCResponse>
   getLobbyPlayers: () => Promise<LobbyPlayer[]>
-  getPlayerHistory: (summonerName: string) => Promise<PlayerHistory>
+  getPlayerHistory: (username: string, tagLine: string, puuid?: string) => Promise<PlayerHistory>
   analyzeLobby: () => Promise<IPCResponse<{ analysis: AnalysisResult[] }>>
   startAutoMonitor: () => Promise<IPCResponse>
   stopAutoMonitor: () => Promise<IPCResponse>
@@ -211,7 +217,7 @@ export interface WindowAPI {
   onGameAutoImported: (callback: (data: { success: boolean; imported: number }) => void) => () => void
 
   // Player tagging methods
-  addPlayerTag: (puuid: string, summonerName: string, tagType: string, note: string | null) => Promise<IPCResponse>
+  addPlayerTag: (puuid: string, username: string, tagLine: string, tagType: string, note: string | null) => Promise<IPCResponse>
   removePlayerTag: (puuid: string, tagType: string) => Promise<IPCResponse>
   removeAllPlayerTags: (puuid: string) => Promise<IPCResponse>
   getPlayerTags: (puuid: string) => Promise<IPCResponse<any[]>>
