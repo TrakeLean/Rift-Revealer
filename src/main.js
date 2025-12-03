@@ -928,17 +928,19 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
     // Prefer PUUID (more reliable) and fall back to name matching
     const history = db.getPlayerHistory(player.username, player.tagLine, player.puuid || null);
     console.log(`  Found ${history.games.length} games with stats:`, history.stats ? 'YES' : 'NO');
-    // Persist latest cosmetics
-    try {
-      db.savePlayer(
-        player.puuid,
-        player.username,
-        player.tagLine,
-        config.region,
-        player.profileIconId || null
-      );
-    } catch (err) {
-      console.log('Warning: failed to save player cosmetic info:', err.message);
+    // Persist latest cosmetics (skip if unknown/anonymized player)
+    if (player.puuid && player.username && player.tagLine) {
+      try {
+        db.savePlayer(
+          player.puuid,
+          player.username,
+          player.tagLine,
+          config.region,
+          player.profileIconId || null
+        );
+      } catch (err) {
+        console.log('Warning: failed to save player cosmetic info:', err.message);
+      }
     }
     if (history.games.length > 0 && history.stats) {
       // Transform games to include isAlly flag
