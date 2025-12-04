@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   root: 'src/renderer',
   base: './',
-  // Serve static assets (profile icons, logo, etc.) from the top-level public folder
+  // Serve static assets (logo, etc.) from the top-level public folder
   // so they end up alongside the built renderer files.
   publicDir: path.resolve(__dirname, 'public'),
   build: {

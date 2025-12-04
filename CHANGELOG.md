@@ -5,6 +5,34 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2025-12-04
+
+### Changed
+- **Skin system massively simplified**: Removed all disk caching (~230 lines of code removed)
+- Skin images now load directly from Riot's Data Dragon CDN
+- **Profile icons now load from CDN**: Eliminated 542MB of bundled profile icon images (4,840 files)
+- Profile icons load from `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/{iconId}.png`
+- Removed custom `local://` protocol and file I/O operations
+- Removed 30-line champion ID mapping - now uses `championName` directly from database
+- IPC signature changed: `getSkinImage(skinId, championName)` instead of `getSkinImage(skinId, championId)`
+- Chromium's built-in HTTP cache now handles image caching automatically
+
+### Removed
+- Disk-based skin cache system (functions: `getSkinCacheDir`, `toLocalSkinUrl`, `registerLocalProtocol`, `findCachedSkinFile`)
+- `getChampionTile` IPC handler and associated logic
+- LCU-based skin fetching (except as fallback for unreleased champions)
+- `CHAMPION_ID_TO_KEY` hardcoded mapping object
+- `skin_cache` database table usage
+- `skin-cache/` directory creation and management
+- **public/profileicon/ directory**: Removed 542MB of local profile icon files
+
+### Technical Details
+- **Code reduction**: ~230 lines removed (92% reduction in skin-related code)
+- **Asset reduction**: 542MB profile icons eliminated from app bundle
+- **New approach**: Direct CDN URLs via `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/{ChampionName}_{SkinNumber}.jpg`
+- **Caching**: Relies on Chromium's automatic HTTP cache (transparent to application code)
+- **Simplification**: Skin URL generation now just ~20 lines total
+
 ## [1.6.0] - 2025-12-03 - BREAKING CHANGE
 
 ### ⚠️ BREAKING CHANGES
@@ -82,14 +110,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tag button restyled to an unobtrusive ghost icon and prevented from toggling card expansion when clicked.
 
 ### Fixed
-- Last-match roster avatars now load the correct profile icons by saving `profileIcon`/`profileIconId` from match imports and shipping the top-level `public/profileicon` assets via Vite’s `publicDir`.
+- Last-match roster avatars now load the correct profile icons by saving `profileIcon`/`profileIconId` from match imports (now loaded from Data Dragon CDN).
 
 ## [1.5.1] - 2025-12-01
 
 ### Changed
 - Simplified database schema: removed unused participant fields (profile icon, roles, gold/CS/damage) and per-player skin_id; user_config now enforces a single row keyed by puuid with replace semantics.
 - Skin cache now persists paths in the database and migrations temporarily disable foreign keys to avoid failures during rebuilds.
-- Removed external ddragon champion icon fallback; PlayerChip now uses cached skin, local tiles/profile icons, and local logo fallback only.
+- Removed external ddragon champion icon fallback; PlayerChip now uses CDN skins, CDN profile icons, and local logo fallback only.
 
 ## [1.5.0] - 2025-12-01
 

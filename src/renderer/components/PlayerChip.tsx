@@ -72,7 +72,6 @@ export function PlayerChip({
   const [playerTags, setPlayerTags] = useState<any[]>(tagsProp || [])
   const [imageIndex, setImageIndex] = useState(0)
   const [skinImageSrc, setSkinImageSrc] = useState<string | null>(null)
-  const [championImageSrc, setChampionImageSrc] = useState<string | null>(null)
   const isClickable = Boolean(onClick)
 
   const debugSkin = (label: string, detail?: unknown) => {
@@ -132,18 +131,18 @@ export function PlayerChip({
     loadTags()
   }, [puuid])
 
-  // Load cached/fetched skin image from main process
+  // Load skin image from main process (Data Dragon CDN)
   useEffect(() => {
     let cancelled = false
     async function loadSkinImage() {
-      if (!window.api?.getSkinImage || skinId === null || skinId === undefined || championId === null || championId === undefined) {
-        debugSkin('skip skin fetch', { reason: 'missing api or ids', skinId, championId, hasApi: Boolean(window.api?.getSkinImage) })
+      if (!window.api?.getSkinImage || skinId === null || skinId === undefined || !championName) {
+        debugSkin('skip skin fetch', { reason: 'missing params', skinId, championName, hasApi: Boolean(window.api?.getSkinImage) })
         if (!cancelled) setSkinImageSrc(null)
         return
       }
       try {
-        const result = await window.api.getSkinImage(skinId, championId)
-        debugSkin('skin fetch result', { skinId, championId, success: result?.success, path: result?.path })
+        const result = await window.api.getSkinImage(skinId, championName)
+        debugSkin('skin fetch result', { skinId, championName, success: result?.success, path: result?.path })
         if (!cancelled) {
           if (result?.success && result.path) {
             setSkinImageSrc(result.path)
@@ -152,7 +151,7 @@ export function PlayerChip({
           }
         }
       } catch (err) {
-        debugSkin('skin fetch error', { skinId, championId, error: (err as Error)?.message })
+        debugSkin('skin fetch error', { skinId, championName, error: (err as Error)?.message })
         if (!cancelled) setSkinImageSrc(null)
       }
     }
@@ -160,61 +159,23 @@ export function PlayerChip({
     return () => {
       cancelled = true
     }
-  }, [skinId, championId])
-
-  // Load champion tile when no explicit skin is provided
-  useEffect(() => {
-    let cancelled = false
-    async function loadChampTile() {
-      if (!window.api?.getChampionTile || championId === null || championId === undefined) {
-        if (!cancelled) setChampionImageSrc(null)
-        return
-      }
-      try {
-        const result = await window.api.getChampionTile(championId)
-        if (!cancelled) {
-          if (result?.success && result.path) {
-            setChampionImageSrc(result.path)
-          } else {
-            setChampionImageSrc(null)
-          }
-        }
-      } catch (err) {
-        if (!cancelled) setChampionImageSrc(null)
-      }
-    }
-    loadChampTile()
-    return () => {
-      cancelled = true
-    }
-  }, [championId, skinId])
+  }, [skinId, championName])
 
   // Reset image fallback when source set changes
   useEffect(() => {
     setImageIndex(0)
-    // If the champion tile finishes loading after we already fell back (e.g., to the logo),
-    // retry from the top of the source list so the new tile can render.
-  }, [skinId, profileIconId, championName, championId, skinImageSrc, championImageSrc])
+  }, [skinId, profileIconId, championName, skinImageSrc])
 
-  const skinNum = typeof skinId === 'number' ? skinId % 1000 : undefined
-  const champFromSkin = typeof skinId === 'number' ? Math.floor(skinId / 1000) : undefined
-  const champSlug = championName ? championName.toLowerCase().replace(/[^a-z0-9]/g, '') : null
-  const tileSources: string[] = []
-  // Base champion tile fallbacks (no remote calls); used until skin art is fetched
-  if (championId !== undefined && championId !== null) {
-    tileSources.push(`/tiles/${championId}_0.png`)
-    tileSources.push(`/tiles/${championId}.png`)
-  }
   const hasProfileIcon = profileIconId !== null && profileIconId !== undefined
-  // Use relative paths so they resolve in both dev (http://localhost) and packaged file:// builds
-  const defaultProfileIcon = 'profileicon/0.png'
+  // Use Data Dragon CDN for profile icons (no local storage needed)
+  const defaultProfileIcon = 'https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/0.png'
   // Avatar should stay as a profile icon (never fall back to champion art)
   const avatarSources = [
-    hasProfileIcon ? `profileicon/${profileIconId}.png` : null,
+    hasProfileIcon ? `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/${profileIconId}.png` : null,
     defaultProfileIcon,
     'logo.png'
   ].filter(Boolean) as string[]
-  const backgroundSrc = skinImageSrc || championImageSrc || tileSources[0] || null
+  const backgroundSrc = skinImageSrc // Skin background from Community Dragon CDN
   const currentSrc = avatarSources[imageIndex]
 
   // Helper to format time ago
@@ -260,7 +221,7 @@ export function PlayerChip({
     ? {
         backgroundImage: `url(${backgroundSrc})`,
         backgroundSize: 'cover',
-        backgroundPosition: 'center'
+        backgroundPosition: 'center 20%'
       }
     : undefined
   const sectionTone = backgroundSrc ? 'bg-black/30' : 'bg-muted/20'
