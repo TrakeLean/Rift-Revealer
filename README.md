@@ -41,8 +41,8 @@ Choose your preferred version:
 - Win/Loss records split by game mode (Ranked, Normal, ARAM, Arena)
 - Champion matchup history
 - Performance metrics (KDA, damage, CS)
- - Threat level indicators
-- **Profile icons and skins** displayed next to player names (skin tiles pulled live from the client with fallbacks)
+- Threat level indicators
+- **Champion skin splash arts** displayed as player card backgrounds (from Riot's Data Dragon CDN)
 
 ### 🏷️ Player Tagging System
 - Tag players as **Toxic** (red), **Friendly** (green), **Notable** (yellow), or **Duo** (blue)
@@ -92,14 +92,16 @@ Choose your preferred version:
 ### First-Time Setup
 
 1. **Configure Your Account**:
-   - Enter your summoner name
+   - Enter your **Riot ID Username** (e.g., "YourName")
+   - Enter your **Riot ID Tag** (e.g., "NA1")
    - Select your region (NA, EUW, EUNE, KR, etc.)
    - Paste your Riot API key
    - Click "Save Configuration"
 
 2. **Import Match History**:
-   - Click "Import Match History"
+   - Click "Import Last 100 Matches"
    - Wait for the import to complete (downloads your last 100 games)
+   - Progress is shown with cancel option
 
 3. **Start Playing**:
    - The app automatically monitors your League client
@@ -259,6 +261,12 @@ Rift-Revealer/
 - Database is stored in: `C:\Users\{YourName}\AppData\Roaming\rift-revealer\database\`
 - If corrupted, delete the database folder and re-import your match history
 
+### After Updating to v1.6.0
+- **Database incompatibility**: v1.6.0 uses a new database schema
+- **Action required**: Delete `C:\Users\{YourName}\AppData\Roaming\rift-revealer\database\` folder
+- Re-import your match history after updating
+- Settings page now requires separate username and tag inputs (e.g., "YourName" + "NA1" instead of "YourName#NA1")
+
 ---
 
 ## 🤝 Contributing
@@ -281,7 +289,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- **Riot Games** for the API and League of Legends
+- **Riot Games** for the API, Data Dragon CDN, and League of Legends
 - **shadcn/ui** for the beautiful component library
 - **Electron** for making desktop apps with web technologies possible
 

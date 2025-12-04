@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Save, AlertCircle, CheckCircle2, Download, RefreshCw, Loader2, Trash2 } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle2, Download, RefreshCw, Loader2 } from 'lucide-react'
 import type { UserConfig } from '../types'
 
 interface SettingsProps {
@@ -28,14 +28,10 @@ export function Settings({ onConfigSaved }: SettingsProps) {
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const [importProgress, setImportProgress] = useState<{ current: number; total: number; imported: number } | null>(null)
   const [importCancelled, setImportCancelled] = useState(false)
-  const [isClearingCache, setIsClearingCache] = useState(false)
-  const [clearCacheStatus, setClearCacheStatus] = useState<string | null>(null)
-  const [skinCacheInfo, setSkinCacheInfo] = useState<{ files: number; bytes: number } | null>(null)
 
   useEffect(() => {
     loadConfig()
     loadAutoStart()
-    loadSkinCacheInfo()
 
     const cleanupProgress = window.api.onImportProgress((progressData) => {
       if (!importCancelled) {
@@ -157,26 +153,6 @@ export function Settings({ onConfigSaved }: SettingsProps) {
     window.api.cancelImportMatchHistory()
   }
 
-  const handleClearSkinCache = async () => {
-    setIsClearingCache(true)
-    setClearCacheStatus(null)
-    try {
-      const result = await window.api.clearSkinCache()
-      if (result?.success) {
-        const count = result.removed ?? 0
-        setClearCacheStatus(`Cleared ${count} cached skin${count === 1 ? '' : 's'}.`)
-        await loadSkinCacheInfo()
-      } else {
-        setClearCacheStatus(result?.error || 'Failed to clear cache')
-      }
-    } catch (error) {
-      console.error('Failed to clear skin cache:', error)
-      setClearCacheStatus('Failed to clear cache')
-    } finally {
-      setIsClearingCache(false)
-    }
-  }
-
   const handleSave = async () => {
     if (!config.username.trim()) {
       setStatus({ message: 'Username is required', type: 'error' })
@@ -215,25 +191,6 @@ export function Settings({ onConfigSaved }: SettingsProps) {
     } finally {
       setIsSaving(false)
     }
-  }
-
-  const loadSkinCacheInfo = async () => {
-    try {
-      const res = await window.api.getSkinCacheInfo()
-      if (res?.success) {
-        setSkinCacheInfo({ files: res.files || 0, bytes: res.bytes || 0 })
-      }
-    } catch (error) {
-      console.error('Failed to load skin cache info:', error)
-    }
-  }
-
-  const formatBytes = (bytes: number) => {
-    if (bytes <= 0 || Number.isNaN(bytes)) return '0 B'
-    const units = ['B', 'KB', 'MB', 'GB']
-    const idx = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
-    const value = bytes / Math.pow(1024, idx)
-    return `${value.toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`
   }
 
   const regions = [
@@ -530,44 +487,6 @@ export function Settings({ onConfigSaved }: SettingsProps) {
             <div className="text-xs">
               <strong>Import Time:</strong> Importing 100 matches can take ~60-90 seconds due to Riot rate limits and backoff on 429s. Progress updates in real time.
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Skin Cache */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Skin Cache</CardTitle>
-          <CardDescription>Cached skin tiles fetched from the League client. Clear them if you need to reclaim space.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <Button
-              variant="outline"
-              className="gap-2"
-              onClick={handleClearSkinCache}
-              disabled={isClearingCache}
-            >
-              {isClearingCache ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Clearing...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4" />
-                  Clear cached skins
-                </>
-              )}
-            </Button>
-            {clearCacheStatus && (
-              <span className="text-sm text-muted-foreground">{clearCacheStatus}</span>
-            )}
-            {skinCacheInfo && (
-              <span className="text-xs text-muted-foreground">
-                Cache size: {formatBytes(skinCacheInfo.bytes)} ({skinCacheInfo.files} file{skinCacheInfo.files === 1 ? '' : 's'})
-              </span>
-            )}
           </div>
         </CardContent>
       </Card>

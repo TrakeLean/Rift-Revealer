@@ -419,6 +419,43 @@ Rift-Revealer/
 
 ---
 
+## Recent Changes (v1.6.0 - 2025-12-03) ⚠️ BREAKING CHANGE
+
+### Database Schema Refactor - Riot ID Split
+- **BREAKING:** Database now stores Riot IDs as separate `username` and `tag_line` fields instead of combined `summoner_name`
+- **Migration required:** Users must delete database and re-import match history
+- **Rationale:** Riot API returns `gameName` and `tagLine` separately - storing split eliminates parsing overhead and improves query performance
+
+### Files Refactored (970+ lines in db.js)
+- `database/schema.sql` - Split summoner_name into username + tag_line across all tables
+- `src/database/db.js` - Complete rewrite of all 20+ methods to use split fields
+- `src/api/riotApi.js` - Updated to pass username/tagLine separately
+- `src/api/lcuConnector.js` - Updated parseRiotId() integration
+- `src/main.js` - Updated IPC handlers and lobby analysis
+- `src/preload.js` - Updated IPC signatures
+- `src/renderer/types/index.ts` - Updated all TypeScript interfaces
+- All React components: Settings.tsx, LobbyAnalysis.tsx, PlayerChip.tsx, PlayerTagMenu.tsx, DevPlayground.tsx
+
+### New Features
+- **Helper functions:** `formatRiotId(username, tagLine)` and `parseRiotId(fullName)` for consistent formatting
+- **Unique constraint:** Added `UNIQUE(match_id, puuid)` to prevent duplicate match imports
+- **Database migration:** Automatic duplicate removal when upgrading
+- **Enhanced logging:** Debug logging for lobby player analysis
+- **Name normalization:** Case-insensitive comparison with space removal
+
+### Bug Fixes
+- **Skin/champion cache:** Now clears properly when entering ChampSelect, InProgress, or Reconnect states
+- **Wrong champion names:** Fixed players showing champions from previous games (e.g., Braum instead of Nautilus)
+- **SQL quote escaping:** Fixed template literal quote escaping in database queries
+- **Unknown player warnings:** Skip saving cosmetic info for anonymized/unknown players
+
+### Settings UI Changes
+- **Two separate inputs:** "Riot ID Username" and "Riot ID Tag" (e.g., "YourName" + "NA1")
+- **Old format:** Previously used combined "YourName#NA1" in single input
+- **Validation:** Both username and tag_line are now required (NOT NULL)
+
+---
+
 ## Recent Changes (v1.5.x - 2025-12)
 
 ### UI Restructure (v1.5.0)

@@ -17,7 +17,6 @@ let riotApi;
 let lcuConnector;
 let autoMonitorInterval = null;
 let updateChecker = null;
-let localProtocolRegistered = false;
 
 // Configure auto-updater
 autoUpdater.autoDownload = false; // We'll download manually after user confirmation
@@ -83,214 +82,27 @@ function isCurrentUser(player, config) {
 }
 
 // ======== Skin cache helpers ========
-function getSkinCacheDir() {
-  const dir = path.join(app.getPath('userData'), 'skin-cache');
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+// Removed disk caching logic - using direct CDN URLs instead
+// Electron's built-in HTTP cache handles caching automatically
+
+// Get skin image URL from Data Dragon (Riot's official CDN)
+// Returns direct CDN URL - no disk caching needed (Electron caches HTTP automatically)
+// Note: championName comes from the database (we already have it!)
+function getSkinImageUrl(skinId, championName) {
+  if (skinId === null || skinId === undefined || !championName) {
+    console.log(`[Skin] Invalid parameters: skinId=${skinId}, championName=${championName}`);
+    return null;
   }
-  return dir;
+
+  const skinNumber = skinId % 1000; // Extract skin number (e.g., 10003 -> 3)
+  const url = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${championName}_${skinNumber}.jpg`;
+  console.log(`[Skin] Resolved URL: ${url}`);
+  return url;
 }
 
-function toLocalSkinUrl(filePath) {
-  const fileName = path.basename(filePath);
-  return `local://skin-cache/${fileName}`;
-}
-
-function registerLocalProtocol() {
-  if (localProtocolRegistered) return;
-  protocol.registerFileProtocol('local', (request, callback) => {
-    try {
-      const urlPath = request.url.replace('local://', '');
-      const targetPath = path.join(app.getPath('userData'), urlPath);
-      callback({ path: targetPath });
-    } catch (err) {
-      callback({ error: -6 }); // net::ERR_FILE_NOT_FOUND
-    }
-  });
-  localProtocolRegistered = true;
-  console.log('Registered local:// protocol for cached assets');
-}
-
-function findCachedSkinFile(skinId) {
-  // Check database record first
-  try {
-    const entry = db?.getSkinCacheEntry(skinId);
-    if (entry && entry.file_path && fs.existsSync(entry.file_path)) {
-      return entry.file_path;
-    }
-  } catch (err) {
-    // Non-fatal
-    console.error('Skin cache DB lookup failed:', err.message);
-  }
-
-  const dir = getSkinCacheDir();
-  const exts = ['.jpg', '.jpeg', '.png', '.webp'];
-  for (const ext of exts) {
-    const candidate = path.join(dir, `${skinId}${ext}`);
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  // Last resort: find any file that starts with the skinId (covers unexpected extensions)
-  const files = fs.readdirSync(dir).filter(f => f.startsWith(`${skinId}.`));
-  if (files.length > 0) {
-    return path.join(dir, files[0]);
-  }
-  return null;
-}
-
-async function fetchAndCacheSkinImage(skinId, championId) {
-  if (skinId === null || skinId === undefined || championId === null || championId === undefined) {
-    return null;
-  }
-
-  if (!lcuConnector) {
-    return null;
-  }
-
-  // Refresh credentials if needed
-  if (!lcuConnector.credentials) {
-    const creds = lcuConnector.findLeagueClientCredentials();
-    if (!creds) {
-      return null;
-    }
-    lcuConnector.credentials = creds;
-  }
-
-  // Get champion skin metadata
-  let champData;
-  try {
-    champData = await lcuConnector.makeRequest(`/lol-game-data/assets/v1/champions/${championId}.json`);
-  } catch (err) {
-    console.error('Failed to fetch champion data for skin cache:', err.message);
-    return null;
-  }
-
-  if (!champData || !Array.isArray(champData.skins)) {
-    return null;
-  }
-
-  const skin =
-    champData.skins.find(s => s.id === skinId) ||
-    champData.skins.find(s => (s.id % 1000) === (skinId % 1000));
-
-  if (!skin) {
-    return null;
-  }
-
-  const tilePath = skin.tilePath || skin.splashPath || skin.uncenteredSplashPath;
-  if (!tilePath) {
-    return null;
-  }
-
-  const ext = path.extname(tilePath) || '.jpg';
-  const targetPath = path.join(getSkinCacheDir(), `${skinId}${ext}`);
-  if (fs.existsSync(targetPath)) {
-    return toLocalSkinUrl(targetPath);
-  }
-
-  const auth = Buffer.from(`riot:${lcuConnector.credentials.token}`).toString('base64');
-
-  await new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        hostname: '127.0.0.1',
-        port: lcuConnector.credentials.port,
-        path: tilePath,
-        method: 'GET',
-        headers: {
-          Authorization: `Basic ${auth}`
-        },
-        rejectUnauthorized: false
-      },
-      res => {
-        if (res.statusCode !== 200) {
-          res.resume();
-          return reject(new Error(`Skin asset request failed with status ${res.statusCode}`));
-        }
-        const fileStream = fs.createWriteStream(targetPath);
-        res.pipe(fileStream);
-        fileStream.on('finish', () => {
-          fileStream.close(resolve);
-        });
-        fileStream.on('error', err => {
-          fileStream.close();
-          reject(err);
-        });
-      }
-    );
-
-    req.on('error', reject);
-    req.end();
-  });
-
-  return toLocalSkinUrl(targetPath);
-}
-
-async function getSkinImagePath(skinId, championId) {
-  // 1) cached
-  const cached = findCachedSkinFile(skinId);
-  if (cached) {
-    return toLocalSkinUrl(cached);
-  }
-
-  // 2) fetch and cache if possible
-  const downloaded = await fetchAndCacheSkinImage(skinId, championId);
-  if (downloaded) {
-    try {
-      const rawPath = downloaded.startsWith('local://')
-        ? path.join(getSkinCacheDir(), path.basename(downloaded))
-        : downloaded;
-      db?.upsertSkinCacheEntry(skinId, championId, rawPath);
-    } catch (err) {
-      console.error('Failed to record skin cache entry:', err.message);
-    }
-    return downloaded;
-  }
-
-  return null;
-}
-
-// Fetch a champion's default tile if no specific skin is provided
-async function getChampionTilePath(championId) {
-  if (championId === null || championId === undefined) {
-    return null;
-  }
-
-  if (!lcuConnector) {
-    return null;
-  }
-
-  // Refresh credentials if needed
-  if (!lcuConnector.credentials) {
-    const creds = lcuConnector.findLeagueClientCredentials();
-    if (!creds) {
-      console.warn('[SkinCache] No LCU credentials available; cannot fetch champion tile');
-      return null;
-    }
-    lcuConnector.credentials = creds;
-  }
-
-  // Get champion skin metadata
-  let champData;
-  try {
-    champData = await lcuConnector.makeRequest(`/lol-game-data/assets/v1/champions/${championId}.json`);
-  } catch (err) {
-    console.error('Failed to fetch champion data for default tile:', err.message);
-    return null;
-  }
-
-  if (!champData || !Array.isArray(champData.skins) || champData.skins.length === 0) {
-    return null;
-  }
-
-  const defaultSkin = champData.skins[0];
-  if (!defaultSkin?.id) {
-    return null;
-  }
-
-  // Reuse skin fetcher for the default skin id
-  return await getSkinImagePath(defaultSkin.id, championId);
+async function getSkinImagePath(skinId, championName) {
+  // Simply return the CDN URL - no caching needed
+  return getSkinImageUrl(skinId, championName);
 }
 
 // Helper to get queue name
@@ -507,8 +319,7 @@ app.whenReady().then(() => {
   console.log('User data:', app.getPath('userData'));
   console.log('Is packaged:', app.isPackaged);
 
-  // Allow loading local cached assets via local:// protocol
-  registerLocalProtocol();
+  // Removed local:// protocol - using direct CDN URLs instead
 
   try {
     console.log('Initializing database...');
@@ -615,82 +426,23 @@ ipcMain.handle('get-last-match-roster', async () => {
   }
 });
 
-ipcMain.handle('get-skin-image', async (event, skinId, championId) => {
+ipcMain.handle('get-skin-image', async (event, skinId, championName) => {
   try {
-    console.log('[Skin] get-skin-image request', { skinId, championId });
-    const resolvedPath = await getSkinImagePath(skinId, championId);
-    if (!resolvedPath) {
-      console.log('[Skin] no image available', { skinId, championId });
+    console.log('[Skin] get-skin-image request', { skinId, championName });
+    const resolvedUrl = await getSkinImagePath(skinId, championName);
+    if (!resolvedUrl) {
+      console.log('[Skin] no image available', { skinId, championName });
       return { success: false, error: 'Skin image not available' };
     }
-    console.log('[Skin] resolved image path', { skinId, championId, resolvedPath });
-    return { success: true, path: resolvedPath };
+    console.log('[Skin] resolved CDN URL', { skinId, championName, resolvedUrl });
+    return { success: true, path: resolvedUrl };
   } catch (error) {
     console.error('Failed to get skin image:', error);
     return { success: false, error: error.message };
   }
 });
 
-ipcMain.handle('get-champion-tile', async (event, championId) => {
-  try {
-    const resolvedPath = await getChampionTilePath(championId);
-    if (!resolvedPath) {
-      return { success: false, error: 'Champion tile not available' };
-    }
-    return { success: true, path: resolvedPath };
-  } catch (error) {
-    console.error('Failed to get champion tile:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-ipcMain.handle('clear-skin-cache', async () => {
-  try {
-    const dir = getSkinCacheDir();
-    let removed = 0;
-    if (fs.existsSync(dir)) {
-      for (const file of fs.readdirSync(dir)) {
-        const fullPath = path.join(dir, file);
-        const stat = fs.statSync(fullPath);
-        if (stat.isFile()) {
-          fs.unlinkSync(fullPath);
-          removed++;
-        }
-      }
-    }
-    try {
-      db?.clearSkinCache();
-    } catch (err) {
-      console.error('Failed to clear skin cache table:', err.message);
-    }
-    return { success: true, removed };
-  } catch (error) {
-    console.error('Failed to clear skin cache:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-ipcMain.handle('get-skin-cache-info', async () => {
-  try {
-    const dir = getSkinCacheDir();
-    let files = 0;
-    let bytes = 0;
-    if (fs.existsSync(dir)) {
-      for (const file of fs.readdirSync(dir)) {
-        const fullPath = path.join(dir, file);
-        const stat = fs.statSync(fullPath);
-        if (stat.isFile()) {
-          files += 1;
-          bytes += stat.size;
-        }
-      }
-    }
-    return { success: true, files, bytes };
-  } catch (error) {
-    console.error('Failed to get skin cache info:', error);
-    return { success: false, error: error.message };
-  }
-});
+// Removed skin cache IPC handlers - no longer needed with direct CDN URLs
 
 ipcMain.handle('diagnose-database', async () => {
   try {

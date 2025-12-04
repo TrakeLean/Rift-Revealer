@@ -62,7 +62,13 @@
       "Bash(git log:*)",
       "Bash(cat:*)",
       "Bash(\"dist\\RiftRevealer 1.5.0.exe\")",
-      "Bash(gh run watch:*)"
+      "Bash(gh run watch:*)",
+      "Bash(else echo \"skin-cache directory not found\")",
+      "Bash(if [ -d \"public/profileicon\" ])",
+      "Bash(then du -sh public/profileicon)",
+      "Bash(else echo \"Directory not found\")",
+      "Bash(then echo \"Still exists\")",
+      "Bash(else echo \"Successfully deleted\")"
     ],
     "deny": [],
     "ask": []

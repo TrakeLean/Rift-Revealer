@@ -180,11 +180,6 @@ export interface ImportProgress {
   imported: number
 }
 
-export interface SkinCacheInfo {
-  files: number
-  bytes: number
-}
-
 // Window API types (for preload bridge)
 export interface WindowAPI {
   getUserConfig: () => Promise<UserConfig | null>
@@ -223,9 +218,7 @@ export interface WindowAPI {
   getPlayerTags: (puuid: string) => Promise<IPCResponse<any[]>>
   getAllTaggedPlayers: () => Promise<IPCResponse<any[]>>
   getLastMatchRoster: () => Promise<IPCResponse<LastMatchRoster>>
-  getSkinImage: (skinId: number, championId: number) => Promise<IPCResponse<{ path: string }>>
-  getChampionTile: (championId: number) => Promise<IPCResponse<{ path: string }>>
-  getSkinCacheInfo: () => Promise<IPCResponse<SkinCacheInfo>>
+  getSkinImage: (skinId: number, championName: string) => Promise<IPCResponse<{ path: string }>>
 }
 
 declare global {

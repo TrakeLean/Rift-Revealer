@@ -92,19 +92,7 @@ class DatabaseManager {
 
   runMigrations() {
     // NOTE: Since you deleted the database, migrations are simplified
-    // Just create skin_cache table if missing
-    const hasSkinCache = this.db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='skin_cache'`).get();
-    if (!hasSkinCache) {
-      console.log('Running migration: Creating skin_cache table');
-      this.db.exec(`
-        CREATE TABLE IF NOT EXISTS skin_cache (
-          skin_id INTEGER PRIMARY KEY,
-          champion_id INTEGER,
-          file_path TEXT NOT NULL,
-          last_fetched INTEGER
-        )
-      `);
-    }
+    // Removed skin_cache table creation - no longer needed with direct CDN URLs
 
     // Add unique constraint on (match_id, puuid) to prevent duplicate imports
     const hasUniqueConstraint = this.db.prepare(`
@@ -338,7 +326,8 @@ class DatabaseManager {
       const liveSkin = this.getLiveSkinSelection(participant.puuid, username, tagLine);
       const resolvedSkinId =
         participant.skinId ??
-        (liveSkin && (liveSkin.championId === null || liveSkin.championId === participant.championId) ? liveSkin.skinId : null);
+        (liveSkin && (liveSkin.championId === null || liveSkin.championId === participant.championId) ? liveSkin.skinId : null) ??
+        (participant.championId ? participant.championId * 1000 : null); // Fallback to default skin (base skin ID)
 
       const lane = normalizeRole(participant);
 
@@ -390,28 +379,6 @@ class DatabaseManager {
         p.lane
       );
     }
-  }
-
-  // Skin cache helpers
-  getSkinCacheEntry(skinId) {
-    const stmt = this.db.prepare('SELECT * FROM skin_cache WHERE skin_id = ?');
-    return stmt.get(skinId);
-  }
-
-  upsertSkinCacheEntry(skinId, championId, filePath) {
-    const stmt = this.db.prepare(`
-      INSERT INTO skin_cache (skin_id, champion_id, file_path, last_fetched)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(skin_id) DO UPDATE SET
-        champion_id=excluded.champion_id,
-        file_path=excluded.file_path,
-        last_fetched=excluded.last_fetched
-    `);
-    return stmt.run(skinId, championId, filePath, Date.now());
-  }
-
-  clearSkinCache() {
-    this.db.exec('DELETE FROM skin_cache');
   }
 
   // Helper: Categorize queue IDs into game modes
