@@ -565,13 +565,13 @@ export function PlayerChip({
               })()}
             </ModeStatsRow>
           ) : (
-            /* Empty spacer for user card to match visual spacing of other cards */
-            <div className="flex-1" />
+            /* Empty placeholder to match stats section height */
+            <div className={sectionClass} />
           )}
 
           {/* For user card (encounterCount === 0), show champion name and tags together in same row */}
           {encounterCount === 0 && (playerTags.length > 0 || championName || lastSeen?.champion) && (
-            <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex flex-wrap gap-2 items-center min-h-[30px]">
               {/* Tags first (left side) */}
               {playerTags.map((tag, idx) => (
                 <div key={idx} className="relative group">
