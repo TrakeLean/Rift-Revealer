@@ -201,20 +201,15 @@ export function PlayerChip({
         debugSkin('skin fetch result', { skinId, championName, success: result?.success, path: result?.path })
         if (!cancelled) {
           if (result?.success && result.path) {
-            // Test if the URL is accessible by trying to load it
-            const img = new Image()
-            img.onload = () => {
-              if (!cancelled) {
-                skinImageCache.set(cacheKey, result.path)
-                setSkinImageSrc(result.path)
-              }
-            }
-            img.onerror = () => {
-              // If skin image fails, fall back to default champion splash (skin 0)
-              debugSkin('skin image load failed, falling back to default', { skinId, championName })
+            // Check validation cache first to avoid re-validating known failures
+            const validationCacheKey = `validation:${result.path}`
+            const validationCached = imageValidationCache.get(validationCacheKey)
+
+            if (validationCached === false) {
+              // We know this URL fails, skip directly to fallback
+              debugSkin('validation cache hit: known failure, skipping to fallback', { skinId, championName })
               const defaultSkinId = parseInt(String(championId || 0) + '000')
-              if (!cancelled && skinId !== defaultSkinId) {
-                // Try loading default skin
+              if (skinId !== defaultSkinId) {
                 const defaultCacheKey = `${championName}-${defaultSkinId}`
                 const cachedDefault = skinImageCache.get(defaultCacheKey)
                 if (cachedDefault !== undefined) {
@@ -239,8 +234,56 @@ export function PlayerChip({
                 skinImageCache.set(cacheKey, null)
                 setSkinImageSrc(null)
               }
+            } else if (validationCached === true) {
+              // We know this URL works, use it directly
+              debugSkin('validation cache hit: known success', { skinId, championName })
+              skinImageCache.set(cacheKey, result.path)
+              setSkinImageSrc(result.path)
+            } else {
+              // Not in validation cache, need to validate
+              const img = new Image()
+              img.onload = () => {
+                if (!cancelled) {
+                  imageValidationCache.set(validationCacheKey, true)
+                  skinImageCache.set(cacheKey, result.path)
+                  setSkinImageSrc(result.path)
+                }
+              }
+              img.onerror = () => {
+                // Cache the failure so we don't try again
+                imageValidationCache.set(validationCacheKey, false)
+                // If skin image fails, fall back to default champion splash (skin 0)
+                debugSkin('skin image load failed, falling back to default', { skinId, championName })
+                const defaultSkinId = parseInt(String(championId || 0) + '000')
+                if (!cancelled && skinId !== defaultSkinId) {
+                  // Try loading default skin
+                  const defaultCacheKey = `${championName}-${defaultSkinId}`
+                  const cachedDefault = skinImageCache.get(defaultCacheKey)
+                  if (cachedDefault !== undefined) {
+                    setSkinImageSrc(cachedDefault)
+                  } else {
+                    window.api.getSkinImage(defaultSkinId, championName).then(fallbackResult => {
+                      if (!cancelled && fallbackResult?.success && fallbackResult.path) {
+                        skinImageCache.set(defaultCacheKey, fallbackResult.path)
+                        setSkinImageSrc(fallbackResult.path)
+                      } else {
+                        skinImageCache.set(defaultCacheKey, null)
+                        setSkinImageSrc(null)
+                      }
+                    }).catch(() => {
+                      if (!cancelled) {
+                        skinImageCache.set(defaultCacheKey, null)
+                        setSkinImageSrc(null)
+                      }
+                    })
+                  }
+                } else {
+                  skinImageCache.set(cacheKey, null)
+                  setSkinImageSrc(null)
+                }
+              }
+              img.src = result.path
             }
-            img.src = result.path
           } else {
             skinImageCache.set(cacheKey, null)
             setSkinImageSrc(null)
@@ -384,7 +427,7 @@ export function PlayerChip({
     <Card
       data-encounters={encounterCount}
       className={cn(
-        'transition-all relative overflow-visible h-full',
+        'relative overflow-visible h-full',
         isClickable && 'cursor-pointer',
         className
       )}
