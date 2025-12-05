@@ -41,9 +41,9 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - thin and darker */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 7px;
 }
 
 ::-webkit-scrollbar-track {
@@ -52,9 +52,9 @@
 
 ::-webkit-scrollbar-thumb {
   background: hsl(var(--muted));
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+  background: hsl(var(--muted-foreground) / 0.5);
 }

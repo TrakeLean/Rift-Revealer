@@ -42,7 +42,10 @@ function App() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col">
         {/* Draggable top bar with window controls */}
-        <div className="flex items-center justify-between px-6 pt-3 pb-2" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+        <div
+          className="sticky top-0 z-[100] flex items-center justify-between px-4 py-2 bg-background/70 backdrop-blur-sm border-b border-border/40"
+          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        >
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
               <img
@@ -53,10 +56,10 @@ function App() {
                 title={`Version ${appVersion}`}
               />
               <div>
-                <h2 className="text-2xl font-bold">
+                <h1 className="text-2xl font-bold">Rift Revealer</h1>
+                <p className="text-xs text-muted-foreground">
                   {navigationItems.find((item) => item.id === currentPage)?.label}
-                </h2>
-                <p className="text-xs text-muted-foreground">Rift Revealer</p>
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
@@ -105,7 +108,7 @@ function App() {
         </div>
 
         {/* Scrollable content area */}
-        <div className="flex-1 overflow-auto px-6 pb-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 pb-6">
           {/* Page Content */}
           <ErrorBoundary key={currentPage}>
             {currentPage === 'lobby' && <LobbyAnalysis />}
