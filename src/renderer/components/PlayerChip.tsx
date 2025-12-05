@@ -114,18 +114,12 @@ export function PlayerChip({
 
     const fetchVersion = async () => {
       try {
-        console.log('[DDragon] Fetching version...')
         const result = await window.api.getDDragonVersion()
-        console.log('[DDragon] API response:', result)
         if (result.success && result.version) {
-          console.log('[DDragon] Setting version to:', result.version)
           setDdragonVersion(result.version)
-        } else {
-          console.warn('[DDragon] No version in response, using fallback')
         }
       } catch (error) {
-        console.error('[DDragon] Failed to fetch Data Dragon version:', error)
-        // Keep using fallback version
+        // Keep using fallback version - silent fail
       }
     }
     fetchVersion()
@@ -244,14 +238,12 @@ export function PlayerChip({
   // Using dynamic version fetched from Riot's API
   // useMemo ensures URLs update when ddragonVersion changes
   const avatarSources = useMemo(() => {
-    console.log(`[DDragon] Building avatar URLs with version: ${ddragonVersion}, profileIcon: ${profileIconId}`)
     const defaultProfileIcon = `https://ddragon.leagueoflegends.com/cdn/${ddragonVersion}/img/profileicon/0.png`
     const sources = [
       hasProfileIcon ? `https://ddragon.leagueoflegends.com/cdn/${ddragonVersion}/img/profileicon/${profileIconId}.png` : null,
       defaultProfileIcon,
       'logo.png'
     ].filter(Boolean) as string[]
-    console.log('[DDragon] Avatar sources:', sources)
     return sources
   }, [ddragonVersion, hasProfileIcon, profileIconId])
 
