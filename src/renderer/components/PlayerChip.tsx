@@ -12,6 +12,9 @@ import type { SplitStats, GameMode, ModeStats } from '../types'
 // Global cache for validated image URLs (persists across component remounts)
 const imageValidationCache = new Map<string, boolean>()
 
+// Global cache for skin image URLs (persists across component remounts)
+const skinImageCache = new Map<string, string | null>()
+
 // Format champion names by adding spaces before capital letters
 const formatChampionName = (name: string): string => {
   if (!name) return name
@@ -184,6 +187,15 @@ export function PlayerChip({
         if (!cancelled) setSkinImageSrc(null)
         return
       }
+
+      // Check cache first
+      const cacheKey = `${championName}-${skinId}`
+      const cachedUrl = skinImageCache.get(cacheKey)
+      if (cachedUrl !== undefined) {
+        if (!cancelled) setSkinImageSrc(cachedUrl)
+        return
+      }
+
       try {
         const result = await window.api.getSkinImage(skinId, championName)
         debugSkin('skin fetch result', { skinId, championName, success: result?.success, path: result?.path })
@@ -192,7 +204,10 @@ export function PlayerChip({
             // Test if the URL is accessible by trying to load it
             const img = new Image()
             img.onload = () => {
-              if (!cancelled) setSkinImageSrc(result.path)
+              if (!cancelled) {
+                skinImageCache.set(cacheKey, result.path)
+                setSkinImageSrc(result.path)
+              }
             }
             img.onerror = () => {
               // If skin image fails, fall back to default champion splash (skin 0)
@@ -200,27 +215,43 @@ export function PlayerChip({
               const defaultSkinId = parseInt(String(championId || 0) + '000')
               if (!cancelled && skinId !== defaultSkinId) {
                 // Try loading default skin
-                window.api.getSkinImage(defaultSkinId, championName).then(fallbackResult => {
-                  if (!cancelled && fallbackResult?.success && fallbackResult.path) {
-                    setSkinImageSrc(fallbackResult.path)
-                  } else {
-                    setSkinImageSrc(null)
-                  }
-                }).catch(() => {
-                  if (!cancelled) setSkinImageSrc(null)
-                })
+                const defaultCacheKey = `${championName}-${defaultSkinId}`
+                const cachedDefault = skinImageCache.get(defaultCacheKey)
+                if (cachedDefault !== undefined) {
+                  setSkinImageSrc(cachedDefault)
+                } else {
+                  window.api.getSkinImage(defaultSkinId, championName).then(fallbackResult => {
+                    if (!cancelled && fallbackResult?.success && fallbackResult.path) {
+                      skinImageCache.set(defaultCacheKey, fallbackResult.path)
+                      setSkinImageSrc(fallbackResult.path)
+                    } else {
+                      skinImageCache.set(defaultCacheKey, null)
+                      setSkinImageSrc(null)
+                    }
+                  }).catch(() => {
+                    if (!cancelled) {
+                      skinImageCache.set(defaultCacheKey, null)
+                      setSkinImageSrc(null)
+                    }
+                  })
+                }
               } else {
+                skinImageCache.set(cacheKey, null)
                 setSkinImageSrc(null)
               }
             }
             img.src = result.path
           } else {
+            skinImageCache.set(cacheKey, null)
             setSkinImageSrc(null)
           }
         }
       } catch (err) {
         debugSkin('skin fetch error', { skinId, championName, error: (err as Error)?.message })
-        if (!cancelled) setSkinImageSrc(null)
+        if (!cancelled) {
+          skinImageCache.set(cacheKey, null)
+          setSkinImageSrc(null)
+        }
       }
     }
     loadSkinImage()
