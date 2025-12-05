@@ -48,6 +48,13 @@ contextBridge.exposeInMainWorld('api', {
   getPlayerTags: (puuid) => ipcRenderer.invoke('get-player-tags', puuid),
   getAllTaggedPlayers: () => ipcRenderer.invoke('get-all-tagged-players'),
 
+  // Player rank API
+  getPlayerRank: (puuid, region) => ipcRenderer.invoke('get-player-rank', puuid, region),
+
+  // Data Dragon version API
+  getDDragonVersion: () => ipcRenderer.invoke('get-ddragon-version'),
+  refreshDDragonVersion: () => ipcRenderer.invoke('refresh-ddragon-version'),
+
   // Window controls
   windowMinimize: () => ipcRenderer.invoke('window-minimize'),
   windowMaximize: () => ipcRenderer.invoke('window-maximize'),

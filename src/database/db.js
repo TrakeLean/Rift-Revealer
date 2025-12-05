@@ -157,6 +157,20 @@ class DatabaseManager {
       console.log('  Migration complete: duplicates removed, unique constraint added');
     }
 
+    // Add ddragon_version column to user_config if it doesn't exist
+    const hasDDragonVersion = this.db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('user_config')
+      WHERE name='ddragon_version'
+    `).get();
+
+    if (hasDDragonVersion.count === 0) {
+      console.log('Running migration: Adding ddragon_version column to user_config');
+      this.db.exec(`
+        ALTER TABLE user_config ADD COLUMN ddragon_version TEXT;
+      `);
+      console.log('  Migration complete: ddragon_version column added');
+    }
+
     console.log('Database migrations completed');
   }
 
@@ -960,6 +974,68 @@ class DatabaseManager {
   }
 
   /**
+   * Save/update player rank in cache
+   * @param {string} puuid - Player's PUUID
+   * @param {Object} rank - Rank data object
+   */
+  savePlayerRank(puuid, rank) {
+    const stmt = this.db.prepare(`
+      INSERT INTO player_ranks (puuid, tier, division, league_points, wins, losses, last_updated)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(puuid) DO UPDATE SET
+        tier = excluded.tier,
+        division = excluded.division,
+        league_points = excluded.league_points,
+        wins = excluded.wins,
+        losses = excluded.losses,
+        last_updated = excluded.last_updated
+    `);
+    return stmt.run(
+      puuid,
+      rank.tier,
+      rank.division || null,
+      rank.leaguePoints,
+      rank.wins,
+      rank.losses,
+      Date.now()
+    );
+  }
+
+  /**
+   * Get cached player rank
+   * @param {string} puuid - Player's PUUID
+   * @param {number} maxAge - Maximum age in milliseconds (default: 1 hour)
+   * @returns {Object|null} Rank data or null if not cached or expired
+   */
+  getPlayerRank(puuid, maxAge = 3600000) {
+    const stmt = this.db.prepare(`
+      SELECT tier, division, league_points, wins, losses, last_updated
+      FROM player_ranks
+      WHERE puuid = ?
+    `);
+    const rank = stmt.get(puuid);
+
+    if (!rank) {
+      return null;
+    }
+
+    // Check if cache is expired
+    const age = Date.now() - rank.last_updated;
+    if (age > maxAge) {
+      return null; // Cache expired
+    }
+
+    return {
+      tier: rank.tier,
+      division: rank.division,
+      leaguePoints: rank.league_points,
+      wins: rank.wins,
+      losses: rank.losses,
+      lastUpdated: rank.last_updated
+    };
+  }
+
+  /**
    * Update auto-update check setting
    * @param {boolean} enabled
    */
@@ -992,6 +1068,30 @@ class DatabaseManager {
     } catch (error) {
       return false;
     }
+  }
+
+  /**
+   * Get Data Dragon version from database
+   * @returns {string|null} Version string or null if not set
+   */
+  getDDragonVersion() {
+    try {
+      const config = this.getUserConfig();
+      return config?.ddragon_version || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Set Data Dragon version in database
+   * @param {string} version - Version string (e.g., "15.24.1")
+   */
+  setDDragonVersion(version) {
+    const stmt = this.db.prepare(`
+      UPDATE user_config SET ddragon_version = ? WHERE id = 1
+    `);
+    stmt.run(version);
   }
 
   close() {

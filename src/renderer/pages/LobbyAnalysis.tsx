@@ -5,7 +5,7 @@ import { StatsPanel } from '@/components/StatsPanel'
 import { MatchCard } from '@/components/MatchCard'
 import { Activity, CheckCircle2, Clock, AlertCircle, Gamepad2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { AnalysisResult, LastMatchRoster, RosterPlayer } from '../types'
+import type { AnalysisResult, LastMatchRoster, RosterPlayer, PlayerRank } from '../types'
 
 // Helper to format Riot ID
 const formatRiotId = (username?: string, tagLine?: string) => {
@@ -65,14 +65,17 @@ export function LobbyAnalysis() {
   const [lastRoster, setLastRoster] = useState<LastMatchRoster | null>(null)
   const [rosterError, setRosterError] = useState<string | null>(null)
   const [rosterLoading, setRosterLoading] = useState(false)
+  const [playerRanks, setPlayerRanks] = useState<Record<string, PlayerRank | null>>({})
   const [bubbleExpanded, setBubbleExpanded] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
+  const [ddragonVersion, setDdragonVersion] = useState<string>('15.24.1') // Default to latest known
   const bubbleTimer = useRef<NodeJS.Timeout | null>(null)
   const lastStatusKey = useRef<string | null>(null)
   const prevIsLiveRef = useRef<boolean>(false)
 
   const loadLastRoster = useCallback(async () => {
-    if (!window.api?.getLastMatchRoster) {
+    if (!window.api?.getLastMatchRoster || !window.api?.getUserConfig) {
+      console.log('[Rank] Missing API methods')
       return
     }
 
@@ -82,6 +85,39 @@ export function LobbyAnalysis() {
       if (res.success && res.data) {
         setLastRoster(res.data)
         setRosterError(null)
+
+        // Fetch ranks for all players in the roster
+        const config = await window.api.getUserConfig()
+        console.log('[Rank] Config:', config)
+        console.log('[Rank] Players in roster:', res.data.players?.length)
+        console.log('[Rank] Has getPlayerRank API:', !!window.api.getPlayerRank)
+
+        if (config && res.data.players && window.api.getPlayerRank) {
+          const ranks: Record<string, PlayerRank | null> = {}
+
+          // Fetch ranks in parallel
+          console.log('[Rank] Fetching ranks for', res.data.players.length, 'players')
+          await Promise.all(
+            res.data.players.map(async (player: RosterPlayer) => {
+              try {
+                console.log(`[Rank] Fetching rank for ${player.username}#${player.tagLine} (${player.puuid}) in ${config.region}`)
+                const rankRes = await window.api.getPlayerRank(player.puuid, config.region)
+                console.log(`[Rank] Response for ${player.username}:`, rankRes)
+                if (rankRes.success && rankRes.data) {
+                  ranks[player.puuid] = rankRes.data.rank
+                } else {
+                  ranks[player.puuid] = null
+                }
+              } catch (error) {
+                console.error(`[Rank] Failed to fetch rank for ${player.username}:`, error)
+                ranks[player.puuid] = null
+              }
+            })
+          )
+
+          console.log('[Rank] Final ranks:', ranks)
+          setPlayerRanks(ranks)
+        }
       } else {
         setLastRoster(null)
         setRosterError(res.error || 'No recent match found. Import matches from Settings to see your last game roster.')
@@ -242,6 +278,22 @@ export function LobbyAnalysis() {
     }, 5000)
   }
 
+  // Fetch Data Dragon version once on mount
+  useEffect(() => {
+    const fetchVersion = async () => {
+      try {
+        const result = await window.api.getDDragonVersion()
+        if (result.success && result.version) {
+          console.log('[LobbyAnalysis] DDragon version:', result.version)
+          setDdragonVersion(result.version)
+        }
+      } catch (error) {
+        console.error('[LobbyAnalysis] Failed to fetch DDragon version:', error)
+      }
+    }
+    fetchVersion()
+  }, [])
+
   useEffect(() => {
     // Listen for gameflow status updates
     const cleanupStatus = window.api.onGameflowStatus((data) => {
@@ -276,7 +328,14 @@ export function LobbyAnalysis() {
 
       const isLiveNow = isLiveState(normalized)
       if (!isLiveNow && prevIsLiveRef.current) {
-        loadLastRoster()
+        // Don't load roster immediately on EndOfGame - wait for auto-import to finish
+        if (normalized !== 'endofgame' && normalized !== 'preendofgame' && normalized !== 'waitingforstats') {
+          loadLastRoster()
+        } else {
+          // Show loading state while waiting for auto-import
+          setRosterLoading(true)
+          setRosterError(null)
+        }
       } else if (isLiveNow && !prevIsLiveRef.current) {
         setLastRoster(null)
         setRosterError(null)
@@ -524,23 +583,13 @@ export function LobbyAnalysis() {
       )
     }
 
-    const isAlly = lastRoster?.userTeamId ? player.teamId === lastRoster.userTeamId : false
-    const lastSeen = lastMatchPlayedAt
-      ? {
-          timestamp: lastMatchPlayedAt,
-          champion: player.championName || 'Unknown',
-          role: formatRoleLabel(player) || undefined,
-          outcome: player.win ? 'win' as const : 'loss' as const,
-          isAlly
-        }
-      : undefined
-
     const encounterCount = player.encounterCount ?? 1
     const wins = player.wins ?? (player.win ? 1 : 0)
     const losses = player.losses ?? (player.win ? 0 : 1)
     const hasDetails = Boolean(player.asEnemy || player.asAlly || (player.games && player.games.length > 0))
     const playerKey = formatRiotId(player.username, player.tagLine)
     const isSelected = expandedPlayer === playerKey
+    const playerRank = playerRanks[player.puuid] ?? null
 
     return (
       <div key={key} className="space-y-2 h-full">
@@ -555,15 +604,17 @@ export function LobbyAnalysis() {
           asAlly={player.asAlly || undefined}
           threatLevel={player.threatLevel || undefined}
           allyQuality={player.allyQuality || undefined}
-          lastSeen={lastSeen}
+          lastSeen={player.lastSeen}
           profileIconId={player.profileIconId ?? undefined}
           skinId={player.skinId ?? undefined}
           championName={player.championName}
           championId={player.championId}
+          ddragonVersion={ddragonVersion}
           byMode={player.byMode || undefined}
           onClick={hasDetails ? () => togglePlayerExpansion(playerKey) : undefined}
           isExpanded={isSelected}
           className={cn("h-full", isSelected && "ring-1 ring-primary/60")}
+          rank={playerRank}
         />
       </div>
     )

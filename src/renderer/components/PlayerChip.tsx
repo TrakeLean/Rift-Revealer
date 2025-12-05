@@ -1,16 +1,33 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { TagPill } from './TagPill'
 import { ModeStatsRow } from './ModeStatsRow'
 import { PlayerTagMenu } from './PlayerTagMenu'
+import { RankBadge } from './RankBadge'
 import { cn } from '@/lib/utils'
 import { User, ChevronDown, ChevronUp, Tag } from 'lucide-react'
 import type { SplitStats, GameMode, ModeStats } from '../types'
 
+// Format champion names by adding spaces before capital letters
+const formatChampionName = (name: string): string => {
+  if (!name) return name
+  // Add space before capital letters (except the first one)
+  return name.replace(/([A-Z])/g, ' $1').trim()
+}
+
 interface PlayerTag {
   label: string
   variant: 'toxic' | 'notable' | 'positive' | 'info'
+}
+
+interface PlayerRank {
+  tier: 'IRON' | 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'EMERALD' | 'DIAMOND' | 'MASTER' | 'GRANDMASTER' | 'CHALLENGER'
+  division?: 'I' | 'II' | 'III' | 'IV'
+  leaguePoints: number
+  wins: number
+  losses: number
+  lastUpdated?: number
 }
 
 interface PlayerChipProps {
@@ -42,6 +59,8 @@ interface PlayerChipProps {
   championName?: string
   championId?: number
   isExpanded?: boolean
+  rank?: PlayerRank | null
+  ddragonVersion?: string // Optional prop from parent to avoid re-fetching
 }
 
 export function PlayerChip({
@@ -66,12 +85,15 @@ export function PlayerChip({
   championName,
   championId,
   isExpanded = false,
+  rank,
+  ddragonVersion: ddragonVersionProp,
 }: PlayerChipProps) {
   const summonerName = `${username}#${tagLine}`
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
   const [playerTags, setPlayerTags] = useState<any[]>(tagsProp || [])
   const [imageIndex, setImageIndex] = useState(0)
   const [skinImageSrc, setSkinImageSrc] = useState<string | null>(null)
+  const [ddragonVersion, setDdragonVersion] = useState<string>(ddragonVersionProp || '15.24.1') // Use prop or fallback
   const isClickable = Boolean(onClick)
 
   const debugSkin = (label: string, detail?: unknown) => {
@@ -82,6 +104,32 @@ export function PlayerChip({
       console.debug(`[SkinDebug] ${summonerName}: ${label}`, detail ?? '')
     }
   }
+
+  // Fetch Data Dragon version on mount (only if not provided as prop)
+  useEffect(() => {
+    if (ddragonVersionProp) {
+      // Version provided by parent, no need to fetch
+      return
+    }
+
+    const fetchVersion = async () => {
+      try {
+        console.log('[DDragon] Fetching version...')
+        const result = await window.api.getDDragonVersion()
+        console.log('[DDragon] API response:', result)
+        if (result.success && result.version) {
+          console.log('[DDragon] Setting version to:', result.version)
+          setDdragonVersion(result.version)
+        } else {
+          console.warn('[DDragon] No version in response, using fallback')
+        }
+      } catch (error) {
+        console.error('[DDragon] Failed to fetch Data Dragon version:', error)
+        // Keep using fallback version
+      }
+    }
+    fetchVersion()
+  }, [ddragonVersionProp])
 
   // Load tags for this player
   const loadTags = async () => {
@@ -145,7 +193,31 @@ export function PlayerChip({
         debugSkin('skin fetch result', { skinId, championName, success: result?.success, path: result?.path })
         if (!cancelled) {
           if (result?.success && result.path) {
-            setSkinImageSrc(result.path)
+            // Test if the URL is accessible by trying to load it
+            const img = new Image()
+            img.onload = () => {
+              if (!cancelled) setSkinImageSrc(result.path)
+            }
+            img.onerror = () => {
+              // If skin image fails, fall back to default champion splash (skin 0)
+              debugSkin('skin image load failed, falling back to default', { skinId, championName })
+              const defaultSkinId = parseInt(String(championId || 0) + '000')
+              if (!cancelled && skinId !== defaultSkinId) {
+                // Try loading default skin
+                window.api.getSkinImage(defaultSkinId, championName).then(fallbackResult => {
+                  if (!cancelled && fallbackResult?.success && fallbackResult.path) {
+                    setSkinImageSrc(fallbackResult.path)
+                  } else {
+                    setSkinImageSrc(null)
+                  }
+                }).catch(() => {
+                  if (!cancelled) setSkinImageSrc(null)
+                })
+              } else {
+                setSkinImageSrc(null)
+              }
+            }
+            img.src = result.path
           } else {
             setSkinImageSrc(null)
           }
@@ -159,7 +231,7 @@ export function PlayerChip({
     return () => {
       cancelled = true
     }
-  }, [skinId, championName])
+  }, [skinId, championName, championId])
 
   // Reset image fallback when source set changes
   useEffect(() => {
@@ -167,14 +239,22 @@ export function PlayerChip({
   }, [skinId, profileIconId, championName, skinImageSrc])
 
   const hasProfileIcon = profileIconId !== null && profileIconId !== undefined
+
   // Use Data Dragon CDN for profile icons (no local storage needed)
-  const defaultProfileIcon = 'https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/0.png'
-  // Avatar should stay as a profile icon (never fall back to champion art)
-  const avatarSources = [
-    hasProfileIcon ? `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/${profileIconId}.png` : null,
-    defaultProfileIcon,
-    'logo.png'
-  ].filter(Boolean) as string[]
+  // Using dynamic version fetched from Riot's API
+  // useMemo ensures URLs update when ddragonVersion changes
+  const avatarSources = useMemo(() => {
+    console.log(`[DDragon] Building avatar URLs with version: ${ddragonVersion}, profileIcon: ${profileIconId}`)
+    const defaultProfileIcon = `https://ddragon.leagueoflegends.com/cdn/${ddragonVersion}/img/profileicon/0.png`
+    const sources = [
+      hasProfileIcon ? `https://ddragon.leagueoflegends.com/cdn/${ddragonVersion}/img/profileicon/${profileIconId}.png` : null,
+      defaultProfileIcon,
+      'logo.png'
+    ].filter(Boolean) as string[]
+    console.log('[DDragon] Avatar sources:', sources)
+    return sources
+  }, [ddragonVersion, hasProfileIcon, profileIconId])
+
   const backgroundSrc = skinImageSrc // Skin background from Community Dragon CDN
   const currentSrc = avatarSources[imageIndex]
 
@@ -231,7 +311,7 @@ export function PlayerChip({
     <Card
       data-encounters={encounterCount}
       className={cn(
-        'transition-all relative overflow-visible',
+        'transition-all relative overflow-visible h-full',
         isClickable && 'cursor-pointer',
         className
       )}
@@ -241,8 +321,8 @@ export function PlayerChip({
       {backgroundSrc && (
         <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/45 to-black/30 pointer-events-none" />
       )}
-      <CardContent className="p-2 relative z-10">
-        <div className="space-y-1.5">
+      <CardContent className="p-2 relative z-10 h-full">
+        <div className="space-y-1.5 h-full flex flex-col">
           {/* Header - Player Name & Total Games - Single Line */}
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -275,9 +355,12 @@ export function PlayerChip({
                   playerTags.length > 0 ? "text-primary" : "text-muted-foreground"
                 )} />
               </Button>
-              <span className="text-[11px] font-medium text-muted-foreground bg-background/80 border border-border/60 rounded-md px-2 py-1 leading-none">
-                {encounterCount} {encounterCount === 1 ? 'game' : 'games'} together
-              </span>
+              {encounterCount > 0 && (
+                <span className="text-[11px] font-medium text-muted-foreground bg-background/80 border border-border/60 rounded-md px-2 py-1 leading-none">
+                  {encounterCount} {encounterCount === 1 ? 'game' : 'games'}
+                </span>
+              )}
+              {rank !== undefined && <RankBadge rank={rank} size="sm" />}
               {isClickable && (
                 isExpanded ? (
                   <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -322,47 +405,103 @@ export function PlayerChip({
           )}
 
           {/* Mode-specific stats and meta row combined */}
-          <ModeStatsRow byMode={byMode}>
-            {playerTags.length > 0 && (
-              <div className="flex gap-1.5 flex-wrap">
-                {playerTags.map((tag, idx) => (
-                  <div key={idx} className="relative group">
-                    <TagPill
-                      label={
-                        tag.tag_type === 'toxic' ? 'Toxic' :
-                        tag.tag_type === 'friendly' ? 'Friendly' :
-                        tag.tag_type === 'notable' ? 'Notable' :
-                        'Duo'
-                      }
-                      variant={
-                        tag.tag_type === 'toxic' ? 'toxic' :
-                        tag.tag_type === 'friendly' ? 'positive' :
-                        tag.tag_type === 'notable' ? 'notable' :
-                        'info'
-                      }
-                      className="cursor-default"
-                    />
-                    {tag.note && (
-                      <div
-                        className="pointer-events-none absolute left-0 top-full mt-1 inline-block rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-wrap break-words z-50"
-                        style={{ width: 'max-content', maxWidth: '18rem' }}
-                      >
-                        {tag.note}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+          {encounterCount > 0 ? (
+            <ModeStatsRow byMode={byMode}>
+              {/* For non-user cards (encounterCount > 0), show tags inline */}
+              {playerTags.length > 0 && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {playerTags.map((tag, idx) => (
+                    <div key={idx} className="relative group">
+                      <TagPill
+                        label={
+                          tag.tag_type === 'toxic' ? 'Toxic' :
+                          tag.tag_type === 'weak' ? 'Weak' :
+                          tag.tag_type === 'friendly' ? 'Friendly' :
+                          tag.tag_type === 'notable' ? 'Notable' :
+                          'Duo'
+                        }
+                        variant={
+                          tag.tag_type === 'toxic' ? 'toxic' :
+                          tag.tag_type === 'weak' ? 'warning' :
+                          tag.tag_type === 'friendly' ? 'positive' :
+                          tag.tag_type === 'notable' ? 'notable' :
+                          'info'
+                        }
+                        className="cursor-default"
+                      />
+                      {tag.note && (
+                        <div
+                          className="pointer-events-none absolute left-0 top-full mt-1 inline-block rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-wrap break-words z-50"
+                          style={{ width: 'max-content', maxWidth: '18rem' }}
+                        >
+                          {tag.note}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
-            {lastSeen && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground ml-auto">
-                <span>{formatTimeAgo(lastSeen.timestamp)}</span>
-                <span>•</span>
-                <span className="font-medium text-foreground/80">{lastSeen.champion}</span>
-              </div>
-            )}
-          </ModeStatsRow>
+              {/* Show champion name for non-user cards */}
+              {(() => {
+                const champToShow = lastSeen?.champion || championName
+                return champToShow ? (
+                  <div className="flex items-center gap-1.5 text-xs ml-auto">
+                    <span className="font-medium text-foreground/80">{formatChampionName(champToShow)}</span>
+                  </div>
+                ) : null
+              })()}
+            </ModeStatsRow>
+          ) : (
+            /* Empty spacer for user card to match visual spacing of other cards */
+            <div className="flex-1" />
+          )}
+
+          {/* For user card (encounterCount === 0), show champion name and tags together in same row */}
+          {encounterCount === 0 && (playerTags.length > 0 || championName || lastSeen?.champion) && (
+            <div className="flex flex-wrap gap-2 items-center">
+              {/* Tags first (left side) */}
+              {playerTags.map((tag, idx) => (
+                <div key={idx} className="relative group">
+                  <TagPill
+                    label={
+                      tag.tag_type === 'toxic' ? 'Toxic' :
+                      tag.tag_type === 'weak' ? 'Weak' :
+                      tag.tag_type === 'friendly' ? 'Friendly' :
+                      tag.tag_type === 'notable' ? 'Notable' :
+                      'Duo'
+                    }
+                    variant={
+                      tag.tag_type === 'toxic' ? 'toxic' :
+                      tag.tag_type === 'weak' ? 'warning' :
+                      tag.tag_type === 'friendly' ? 'positive' :
+                      tag.tag_type === 'notable' ? 'notable' :
+                      'info'
+                    }
+                    className="cursor-default"
+                  />
+                  {tag.note && (
+                    <div
+                      className="pointer-events-none absolute left-0 top-full mt-1 inline-block rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-wrap break-words z-50"
+                      style={{ width: 'max-content', maxWidth: '18rem' }}
+                    >
+                      {tag.note}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Champion name last (right side) */}
+              {(() => {
+                const champToShow = lastSeen?.champion || championName
+                return champToShow ? (
+                  <div className="flex items-center gap-1.5 text-xs ml-auto">
+                    <span className="font-medium text-foreground/80">{formatChampionName(champToShow)}</span>
+                  </div>
+                ) : null
+              })()}
+            </div>
+          )}
         </div>
       </CardContent>
 

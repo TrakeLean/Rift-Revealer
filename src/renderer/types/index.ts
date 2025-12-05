@@ -41,6 +41,15 @@ export interface LobbyPlayer {
   source: 'championSelect' | 'inGame'
 }
 
+export interface PlayerRank {
+  tier: 'IRON' | 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'EMERALD' | 'DIAMOND' | 'MASTER' | 'GRANDMASTER' | 'CHALLENGER'
+  division?: 'I' | 'II' | 'III' | 'IV' // Not applicable for Master+
+  leaguePoints: number
+  wins: number
+  losses: number
+  lastUpdated?: number
+}
+
 export interface RosterPlayer {
   puuid: string
   username: string
@@ -71,6 +80,7 @@ export interface RosterPlayer {
   allyQuality?: 'good' | 'average' | 'poor' | null
   byMode?: Record<GameMode, ModeStats> | null
   games?: MatchData[]
+  rank?: PlayerRank | null
 }
 
 export interface LastMatchRoster {
@@ -219,6 +229,11 @@ export interface WindowAPI {
   getAllTaggedPlayers: () => Promise<IPCResponse<any[]>>
   getLastMatchRoster: () => Promise<IPCResponse<LastMatchRoster>>
   getSkinImage: (skinId: number, championName: string) => Promise<IPCResponse<{ path: string }>>
+  getPlayerRank: (puuid: string, region: string) => Promise<IPCResponse<{ rank: PlayerRank | null; cached?: boolean }>>
+
+  // Data Dragon version methods
+  getDDragonVersion: () => Promise<IPCResponse<{ version: string }>>
+  refreshDDragonVersion: () => Promise<IPCResponse<{ version: string }>>
 }
 
 declare global {
