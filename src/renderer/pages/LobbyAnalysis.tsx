@@ -370,7 +370,21 @@ export function LobbyAnalysis() {
       console.log('📥 Received lobby-update event:', data)
       if (data.success && data.data) {
         console.log('  Setting detected players:', data.data.analysis.length)
-        const players = data.data.analysis || []
+        const rawPlayers = data.data.analysis || []
+
+        // Deduplicate by PUUID (or username#tagLine if no PUUID)
+        const seen = new Set()
+        const players = rawPlayers.filter(player => {
+          const key = player.puuid || formatRiotId(player.username, player.tagLine)
+          if (seen.has(key)) {
+            console.warn('⚠️  Duplicate player detected and removed:', key)
+            return false
+          }
+          seen.add(key)
+          return true
+        })
+
+        console.log('  After deduplication:', players.length, 'unique players')
         setDetectedPlayers(players)
         cachedDetectedPlayers = players
 
