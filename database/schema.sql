@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS user_config (
     riot_api_key TEXT,
     last_updated INTEGER,
     auto_update_check INTEGER DEFAULT 1,
-    auto_start INTEGER DEFAULT 0
+    auto_start INTEGER DEFAULT 0,
+    ddragon_version TEXT
 );
 
 -- Players table
@@ -62,6 +63,18 @@ CREATE TABLE IF NOT EXISTS player_tags (
     note TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE(puuid, tag_type)
+);
+
+-- Player rank cache table
+CREATE TABLE IF NOT EXISTS player_ranks (
+    puuid TEXT PRIMARY KEY,
+    tier TEXT NOT NULL,
+    division TEXT,
+    league_points INTEGER NOT NULL,
+    wins INTEGER NOT NULL,
+    losses INTEGER NOT NULL,
+    last_updated INTEGER NOT NULL,
+    FOREIGN KEY (puuid) REFERENCES players(puuid)
 );
 
 -- Indexes for better query performance

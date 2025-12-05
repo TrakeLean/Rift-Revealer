@@ -60,6 +60,63 @@ class RiotAPI {
     }
   }
 
+  async getSummonerByPuuid(puuid, region) {
+    try {
+      const response = await axios.get(
+        `https://${region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`,
+        {
+          headers: { 'X-Riot-Token': this.apiKey }
+        }
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to fetch summoner by PUUID: ${error.response?.data?.status?.message || error.message}`);
+    }
+  }
+
+  async getRankedStats(summonerId, region) {
+    try {
+      const response = await axios.get(
+        `https://${region}.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`,
+        {
+          headers: { 'X-Riot-Token': this.apiKey }
+        }
+      );
+      // Returns array of ranked entries (RANKED_SOLO_5x5, RANKED_FLEX_SR, etc.)
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to fetch ranked stats: ${error.response?.data?.status?.message || error.message}`);
+    }
+  }
+
+  async getLatestDDragonVersion() {
+    // Try to fetch from API with retries
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await axios.get('https://ddragon.leagueoflegends.com/api/versions.json', {
+          timeout: 5000
+        });
+        // Returns array like ["15.24.1", "15.23.1", ...] - first is latest
+        return response.data[0];
+      } catch (error) {
+        console.error(`[DDragon] Fetch attempt ${attempt}/3 failed:`, error.message);
+        if (attempt === 3) {
+          // All retries failed - check database as fallback
+          const cachedVersion = this.db.getDDragonVersion();
+          if (cachedVersion) {
+            console.log(`[DDragon] Using cached version from database: ${cachedVersion}`);
+            return cachedVersion;
+          }
+          // Last resort fallback
+          console.warn('[DDragon] No cached version, using fallback: 14.23.1');
+          return '14.23.1';
+        }
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+      }
+    }
+  }
+
   async getMatchIdsByPuuid(puuid, region, count = 20) {
     try {
       const regionalRoute = this.getRegionalRoute(region);
@@ -142,6 +199,15 @@ class RiotAPI {
           }
 
           console.error(`Failed to import match ${matchId}:`, error.message);
+
+          // Send progress update even on failure (for already-existing matches)
+          if (progressCallback) {
+            progressCallback({
+              current: i + 1,
+              total: matchIds.length,
+              imported: imported
+            });
+          }
         }
       }
 

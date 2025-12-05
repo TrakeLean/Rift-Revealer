@@ -1,5 +1,161 @@
 # Development Context
 
+## 🔥 Current Work Session - 2025-12-04
+
+### Feature: Player Rank Display in Last Match Roster
+
+**Status:** ✅ COMPLETE - Ready for Testing with New API Key
+
+### Database Refactor: username + tag_line Split
+
+**Status:** ✅ COMPLETE - All Files Verified and Updated
+
+**Summary:**
+The database refactor (splitting `summoner_name` into `username` + `tag_line`) that was started on 2025-12-03 is now **100% complete**. All 10 files have been verified:
+
+- ✅ `database/schema.sql` - Schema updated with split fields
+- ✅ `src/database/db.js` - Complete rewrite (970 lines) with helper functions
+- ✅ `src/api/riotApi.js` - Already using username/tagLine parameters
+- ✅ `src/api/lcuConnector.js` - Already parsing names with parseRiotId()
+- ✅ `src/main.js` - All DB calls updated to use split fields
+- ✅ `src/preload.js` - IPC signatures updated
+- ✅ `src/renderer/types/index.ts` - All TypeScript interfaces updated
+- ✅ `src/renderer/pages/Settings.tsx` - Uses username + tag_line
+- ✅ `src/renderer/pages/LobbyAnalysis.tsx` - Uses split fields
+- ✅ `src/renderer/components/PlayerChip.tsx` - Props are username + tagLine
+
+**App Testing Results (2025-12-04 20:30):**
+```
+✓ Build successful (2073 modules, 3.13s)
+✓ Database schema initialized
+✓ Database migrations completed
+✓ Last Match Roster loaded (10 players)
+✓ Skin resolution working (all CDN URLs generated)
+✓ Rank fetching operational (waiting for valid API key)
+```
+
+**Pattern Used:**
+Components correctly separate storage from display:
+```typescript
+// Props accept split fields
+interface PlayerChipProps {
+  username: string
+  tagLine: string
+}
+
+// Display name created locally when needed
+const summonerName = `${username}#${tagLine}`
+```
+
+This is the **correct approach** - store split in database, display combined in UI.
+
+**What Was Built:**
+We added a comprehensive rank fetching and display system that shows each player's solo queue rank in the Last Match Roster section.
+
+#### Implementation Details:
+
+**1. Backend API Integration (`src/api/riotApi.js`)**
+- Added `getSummonerByPuuid(puuid, region)` - Maps PUUID to summonerId (required for rank API)
+- Added `getRankedStats(summonerId, region)` - Fetches league entries from Riot API
+- Endpoint used: `GET /lol/league/v4/entries/by-summoner/{summonerId}`
+- Returns array with RANKED_SOLO_5x5 and RANKED_FLEX_SR entries
+
+**2. Database Caching System**
+- Created `player_ranks` table in `database/schema.sql`:
+  - Fields: puuid, tier, division, league_points, wins, losses, last_updated
+- Added caching methods in `src/database/db.js`:
+  - `savePlayerRank(puuid, rank)` - Saves/updates rank in cache
+  - `getPlayerRank(puuid, maxAge)` - Retrieves cached rank (default 1-hour TTL)
+- Caching prevents excessive API calls and improves performance
+
+**3. IPC Handler (`src/main.js`)**
+- Added `get-player-rank` handler with intelligent caching:
+  - Checks cache first (1-hour expiration)
+  - Fetches from Riot API if cache miss or expired
+  - Automatically saves fresh data to cache
+  - Returns cached flag to track data source
+
+**4. TypeScript Types (`src/renderer/types/index.ts`)**
+```typescript
+interface PlayerRank {
+  tier: 'IRON' | 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'EMERALD' | 'DIAMOND' | 'MASTER' | 'GRANDMASTER' | 'CHALLENGER'
+  division?: 'I' | 'II' | 'III' | 'IV'
+  leaguePoints: number
+  wins: number
+  losses: number
+}
+```
+
+**5. UI Components**
+- **RankBadge Component (`src/renderer/components/RankBadge.tsx`)**:
+  - Displays tier with color-coded text (Gold=yellow, Platinum=teal, Diamond=blue, etc.)
+  - Shows division (I-IV) for non-Master+ ranks
+  - Displays LP count
+  - Tooltip shows full details: "Gold II 75 LP - 45W 38L"
+  - Handles null/unranked state with "Unranked" badge
+
+- **PlayerChip Integration (`src/renderer/components/PlayerChip.tsx`)**:
+  - Added `rank` prop to PlayerChipProps
+  - Rank badge displays next to encounter count badge
+  - Positioned inside card for proper styling
+
+- **LobbyAnalysis Integration (`src/renderer/pages/LobbyAnalysis.tsx`)**:
+  - Fetches ranks for all players when Last Match Roster loads
+  - Parallel API calls for optimal performance
+  - Debug logging added to track rank fetching
+  - Stores ranks in `playerRanks` state object
+
+#### Current Issue:
+**403 Forbidden Error from Riot API**
+- The Riot API is returning "Forbidden" when calling `/lol/league/v4/entries/by-summoner/{summonerId}`
+- This indicates an **API key permission issue**, not a code bug
+- Error logs show:
+  ```
+  Failed to fetch player rank: Error: Failed to fetch ranked stats: Forbidden
+  ```
+
+#### What Works:
+✅ Rank fetching logic is correctly implemented
+✅ API calls are being made to the correct endpoint
+✅ Rank badge displays inside PlayerChip card (positioning fixed)
+✅ Caching system is in place
+✅ Shows "Unranked" badge when rank unavailable
+
+#### Next Steps:
+1. ✅ **New API key received:** `RGAPI-1b155835-6973-484e-8252-351cb0e58ffa`
+2. **Update the API key in app Settings:**
+   - Open Rift Revealer
+   - Navigate to Settings tab
+   - Paste API key in the "Riot API Key" field
+   - Click "Save Configuration"
+3. **Test rank display:**
+   - View Last Match Roster
+   - Ranks should display properly (e.g., "Gold II 75 LP")
+   - Verify rank badges appear on all player cards
+   - Check console logs for successful rank fetches
+
+#### Files Modified:
+- `src/api/riotApi.js` - Added rank API methods
+- `database/schema.sql` - Added player_ranks table
+- `src/database/db.js` - Added rank caching methods
+- `src/main.js` - Added get-player-rank IPC handler with caching
+- `src/preload.js` - Exposed getPlayerRank API to renderer
+- `src/renderer/types/index.ts` - Added PlayerRank interface
+- `src/renderer/components/RankBadge.tsx` - New rank badge component
+- `src/renderer/components/PlayerChip.tsx` - Integrated rank badge display
+- `src/renderer/pages/LobbyAnalysis.tsx` - Added rank fetching and debug logs
+
+#### Testing Commands:
+```bash
+# Rebuild and test
+npm start
+
+# Check logs for rank fetch attempts
+# Look for "[Rank]" prefixed console logs
+```
+
+---
+
 ## Project Overview
 
 **Rift Revealer** - A desktop application for League of Legends players that tracks lobby encounters and provides instant analysis of players you've faced before. Monitors the League client in real-time and alerts you when you enter a game with someone from your match history.

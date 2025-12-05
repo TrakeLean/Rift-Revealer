@@ -350,6 +350,9 @@ app.whenReady().then(() => {
     console.log('Starting gameflow monitor...');
     startGameflowMonitor();
 
+    // Fetch and cache Data Dragon version on startup
+    fetchAndCacheDDragonVersion();
+
     // Check for updates on startup (if enabled)
     checkForUpdatesOnStartup();
   } catch (error) {
@@ -414,11 +417,14 @@ ipcMain.handle('get-last-match-roster', async () => {
   try {
     const roster = db.getMostRecentMatchRoster();
     if (!roster) {
+      console.log('[Last Roster] No recent matches found');
       return {
         success: false,
         error: 'No recent matches found. Import matches from Settings to see your last game roster.'
       };
     }
+    console.log(`[Last Roster] Returning roster for match ${roster.matchId} with ${roster.players?.length || 0} players`);
+    console.log('[Last Roster] Player skin IDs:', roster.players?.map(p => `${p.username}: ${p.skinId}`).join(', '));
     return { success: true, data: roster };
   } catch (error) {
     console.error('Failed to get last match roster:', error);
@@ -566,6 +572,65 @@ ipcMain.handle('get-player-history', async (event, username, tagLine, puuid = nu
   }
 });
 
+ipcMain.handle('get-player-rank', async (event, puuid, region) => {
+  try {
+    // Check cache first (1 hour cache)
+    const cachedRank = db.getPlayerRank(puuid, 3600000);
+    if (cachedRank) {
+      console.log(`[Rank] Using cached rank for ${puuid}`);
+      return {
+        success: true,
+        rank: cachedRank,
+        cached: true
+      };
+    }
+
+    const config = db.getUserConfig();
+    if (!config || !config.riot_api_key) {
+      throw new Error('Riot API key not configured');
+    }
+
+    riotApi.setApiKey(config.riot_api_key);
+
+    // First get summoner data to get the summonerId
+    const summoner = await riotApi.getSummonerByPuuid(puuid, region);
+
+    // Then get ranked stats using the summonerId
+    const rankedStats = await riotApi.getRankedStats(summoner.id, region);
+
+    // Find RANKED_SOLO_5x5 entry
+    const soloQueueEntry = rankedStats.find(entry => entry.queueType === 'RANKED_SOLO_5x5');
+
+    if (!soloQueueEntry) {
+      return {
+        success: true,
+        rank: null // Player is unranked
+      };
+    }
+
+    const rank = {
+      tier: soloQueueEntry.tier, // IRON, BRONZE, SILVER, GOLD, PLATINUM, EMERALD, DIAMOND, MASTER, GRANDMASTER, CHALLENGER
+      division: soloQueueEntry.rank, // I, II, III, IV (not applicable for Master+)
+      leaguePoints: soloQueueEntry.leaguePoints,
+      wins: soloQueueEntry.wins,
+      losses: soloQueueEntry.losses
+    };
+
+    // Save to cache
+    db.savePlayerRank(puuid, rank);
+    console.log(`[Rank] Fetched and cached rank for ${puuid}: ${rank.tier} ${rank.division || ''}`);
+
+    return {
+      success: true,
+      rank,
+      cached: false
+    };
+  } catch (error) {
+    console.error('Failed to fetch player rank:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('analyze-lobby', async () => {
   try {
     // Check if user config exists
@@ -665,6 +730,12 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
   // Cache live skin selections so match imports can persist skin IDs
   // Replace cache with current lobby data (cache was already cleared before calling this function)
   if (db?.setLiveSkinSelections) {
+    console.log('  [DEBUG] Lobby players data:', JSON.stringify(lobbyPlayers.map(p => ({
+      username: p.username,
+      championId: p.championId,
+      skinId: p.skinId,
+      hasSkinId: p.skinId !== undefined && p.skinId !== null
+    })), null, 2));
     db.setLiveSkinSelections(lobbyPlayers, false); // clearFirst=false since we cleared it earlier
   }
 
@@ -883,18 +954,23 @@ async function startGameflowMonitor() {
         }
 
         case 'InProgress': {
-          // Game has started - analyze if we haven't yet (for ranked queues)
-          if (!lastAnalyzedPlayers) {
-            // Clear cache for new game
+          // Game has started - re-analyze to capture actual champion/skin selections
+          // (ChampSelect analysis happens too early before champions are locked)
+          console.log('=== ANALYZING LOBBY (InProgress) ===');
+          const lobbyPlayers = await lcuConnector.getLobbyPlayers();
+          const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
+
+          // Only re-analyze if players changed OR if we haven't analyzed yet
+          if (!lastAnalyzedPlayers || playerHash !== lastAnalyzedPlayers) {
+            // Clear and refresh cache with actual champion/skin data
             if (db?.setLiveSkinSelections) {
-              db.setLiveSkinSelections([], true); // clearFirst=true for new lobby
-              console.log('  [Skin Cache] Cleared for new InProgress game');
+              db.setLiveSkinSelections([], true); // clearFirst=true
+              console.log('  [Skin Cache] Cleared for InProgress game');
             }
-            console.log('=== ANALYZING LOBBY (InProgress - Ranked) ===');
-            const lobbyPlayers = await lcuConnector.getLobbyPlayers();
-            const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
             lastAnalyzedPlayers = playerHash;
             await analyzeLobbyPlayers(lobbyPlayers);
+          } else {
+            console.log('  [InProgress] Players unchanged, skipping re-analysis');
           }
 
           if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1087,6 +1163,67 @@ ipcMain.handle('get-all-tagged-players', async () => {
     return { success: true, taggedPlayers };
   } catch (error) {
     console.error('Failed to get tagged players:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ========== Data Dragon Version Management ==========
+
+/**
+ * Fetch and cache the latest Data Dragon version
+ */
+async function fetchAndCacheDDragonVersion() {
+  try {
+    // Check if we already have a version cached
+    const cachedVersion = db.getDDragonVersion();
+    if (cachedVersion) {
+      console.log(`Using cached Data Dragon version: ${cachedVersion}`);
+      return cachedVersion;
+    }
+
+    // Fetch latest version
+    console.log('Fetching latest Data Dragon version...');
+    const version = await riotApi.getLatestDDragonVersion();
+    console.log(`Latest Data Dragon version: ${version}`);
+
+    // Cache it in database
+    db.setDDragonVersion(version);
+    console.log('Data Dragon version cached successfully');
+
+    return version;
+  } catch (error) {
+    console.error('Failed to fetch/cache Data Dragon version:', error);
+    // Return fallback version on error
+    return '14.23.1';
+  }
+}
+
+ipcMain.handle('get-ddragon-version', async () => {
+  try {
+    // Try to get from database first
+    let version = db.getDDragonVersion();
+
+    // If not in database, fetch and cache it
+    if (!version) {
+      version = await fetchAndCacheDDragonVersion();
+    }
+
+    return { success: true, version };
+  } catch (error) {
+    console.error('Failed to get Data Dragon version:', error);
+    return { success: false, version: '14.23.1' }; // Fallback
+  }
+});
+
+ipcMain.handle('refresh-ddragon-version', async () => {
+  try {
+    console.log('Manually refreshing Data Dragon version...');
+    const version = await riotApi.getLatestDDragonVersion();
+    db.setDDragonVersion(version);
+    console.log(`Data Dragon version updated to: ${version}`);
+    return { success: true, version };
+  } catch (error) {
+    console.error('Failed to refresh Data Dragon version:', error);
     return { success: false, error: error.message };
   }
 });
