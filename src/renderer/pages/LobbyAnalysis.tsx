@@ -722,9 +722,14 @@ export function LobbyAnalysis() {
                   })}
                 </div>
               ) : (
-                <div className="text-center text-muted-foreground py-12">
-                  <p>No players detected yet.</p>
-                  <p className="text-sm mt-2">Join a lobby or start a game to see your match history with players.</p>
+                <div className="text-center py-16">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted/50 mb-4">
+                    <Users className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">All New Players</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                    You haven't encountered any of these players before. Their match history will be tracked after this game.
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -735,7 +740,7 @@ export function LobbyAnalysis() {
           <CardHeader>
             <CardTitle>Last Match Roster</CardTitle>
             <CardDescription>
-              Tag players from your most recent game when you&apos;re out of lobby or in client idle states.
+              Review and tag players from your most recent match.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -743,16 +748,6 @@ export function LobbyAnalysis() {
               <div className="py-10 text-center text-muted-foreground">Loading your last match...</div>
             ) : lastRoster ? (
               <div className="space-y-4">
-                <div className="text-sm text-muted-foreground flex items-center gap-2">
-                  <span>{getQueueName(lastRoster.queueId)}</span>
-                  {lastMatchPlayedAt && (
-                    <>
-                      <span>•</span>
-                      <span>{lastMatchPlayedAt.toLocaleString()}</span>
-                    </>
-                  )}
-                </div>
-
                 {/* Five rows of two cards each to avoid cramped widths */}
                 <div className="space-y-3">
                   {Array.from({ length: Math.ceil(rosterLayout.rows.length) }).map((_, idx) => {
@@ -805,6 +800,17 @@ export function LobbyAnalysis() {
                       </div>
                     )
                   })}
+                </div>
+
+                {/* Match metadata - bottom right */}
+                <div className="text-sm text-muted-foreground flex items-center gap-2 justify-end">
+                  <span>{getQueueName(lastRoster.queueId)}</span>
+                  {lastMatchPlayedAt && (
+                    <>
+                      <span>•</span>
+                      <span>{lastMatchPlayedAt.toLocaleString()}</span>
+                    </>
+                  )}
                 </div>
 
               </div>
