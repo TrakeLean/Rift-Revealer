@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, protocol, Notification } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -720,6 +720,112 @@ ipcMain.handle('analyze-lobby', async () => {
   }
 });
 
+// Show notification for detected players
+function showPlayerDetectionNotification(analysis) {
+  try {
+    // Check if notifications are enabled
+    const config = db.getUserConfig();
+    if (!config || !config.notifications_enabled) {
+      return; // Notifications disabled
+    }
+
+    // Filter players based on tag notification settings
+    const filteredAnalysis = analysis.filter(player => {
+      const tags = player.tags || [];
+
+      // If player has no tags, show notification
+      if (tags.length === 0) return true;
+
+      // Check if any of their tags are enabled for notifications
+      return tags.some(tag => {
+        switch (tag.tag_type) {
+          case 'toxic': return config.notify_toxic === 1;
+          case 'weak': return config.notify_weak === 1;
+          case 'friendly': return config.notify_friendly === 1;
+          case 'notable': return config.notify_notable === 1;
+          case 'duo': return config.notify_duo === 1;
+          default: return true;
+        }
+      });
+    });
+
+    // If all players were filtered out, don't show notification
+    if (filteredAnalysis.length === 0) {
+      console.log('📭 All detected players filtered by notification settings');
+      return;
+    }
+
+    // Get icon path
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'icon.ico')
+      : path.join(__dirname, '../icon.ico');
+
+    if (filteredAnalysis.length === 1) {
+      // Single player notification
+      const player = filteredAnalysis[0];
+      const playerName = formatRiotId(player.username, player.tagLine);
+      const winRate = player.winRate;
+      const record = `${player.wins}-${player.losses}`;
+
+      // Get player tags
+      const tags = player.tags || [];
+      const tagText = tags.length > 0
+        ? `\nTags: ${tags.map(t => t.tag_type.charAt(0).toUpperCase() + t.tag_type.slice(1)).join(', ')}`
+        : '';
+
+      // Get notes from tags
+      const notesText = tags
+        .filter(t => t.note && t.note.trim())
+        .map(t => `\n• ${t.note}`)
+        .join('');
+
+      const notification = new Notification({
+        title: '🎮 Player Detected!',
+        body: `${playerName}\nRecord: ${record} (${winRate}% WR)${tagText}${notesText}`,
+        icon: iconPath,
+        silent: false
+      });
+
+      notification.on('click', () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      });
+
+      notification.show();
+    } else {
+      // Multiple players notification
+      const topPlayers = filteredAnalysis.slice(0, 3);
+      const playerList = topPlayers
+        .map(p => `${formatRiotId(p.username, p.tagLine)} (${p.wins}-${p.losses})`)
+        .join('\n');
+
+      const moreText = filteredAnalysis.length > 3 ? `\n...and ${filteredAnalysis.length - 3} more` : '';
+
+      const notification = new Notification({
+        title: `🎮 ${filteredAnalysis.length} Players Detected!`,
+        body: `${playerList}${moreText}`,
+        icon: iconPath,
+        silent: false
+      });
+
+      notification.on('click', () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      });
+
+      notification.show();
+    }
+
+    console.log(`📬 Notification shown for ${filteredAnalysis.length} detected player(s)`);
+  } catch (error) {
+    console.error('Failed to show notification:', error);
+  }
+}
+
 // Helper function to analyze lobby players
 async function analyzeLobbyPlayers(lobbyPlayers) {
   const config = db.getUserConfig();
@@ -824,6 +930,11 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
       success: true,
       data: { analysis }
     });
+
+    // Show notification if window is not focused and players detected
+    if (analysis.length > 0 && (!mainWindow.isFocused() || mainWindow.isMinimized())) {
+      showPlayerDetectionNotification(analysis);
+    }
   } else {
     console.log('⚠️  Cannot send lobby-update: mainWindow not ready');
   }
@@ -1382,6 +1493,17 @@ ipcMain.handle('get-auto-start', async () => {
     return { success: true, enabled: actualEnabled };
   } catch (error) {
     console.error('Failed to get auto-start setting:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Notification settings
+ipcMain.handle('update-notification-settings', async (event, settings) => {
+  try {
+    db.updateNotificationSettings(settings);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to update notification settings:', error);
     return { success: false, error: error.message };
   }
 });

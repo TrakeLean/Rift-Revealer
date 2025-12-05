@@ -171,6 +171,25 @@ class DatabaseManager {
       console.log('  Migration complete: ddragon_version column added');
     }
 
+    // Add notification settings columns to user_config if they don't exist
+    const hasNotificationsEnabled = this.db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('user_config')
+      WHERE name='notifications_enabled'
+    `).get();
+
+    if (hasNotificationsEnabled.count === 0) {
+      console.log('Running migration: Adding notification settings columns to user_config');
+      this.db.exec(`
+        ALTER TABLE user_config ADD COLUMN notifications_enabled INTEGER DEFAULT 0;
+        ALTER TABLE user_config ADD COLUMN notify_toxic INTEGER DEFAULT 1;
+        ALTER TABLE user_config ADD COLUMN notify_weak INTEGER DEFAULT 1;
+        ALTER TABLE user_config ADD COLUMN notify_friendly INTEGER DEFAULT 1;
+        ALTER TABLE user_config ADD COLUMN notify_notable INTEGER DEFAULT 1;
+        ALTER TABLE user_config ADD COLUMN notify_duo INTEGER DEFAULT 0;
+      `);
+      console.log('  Migration complete: notification settings columns added');
+    }
+
     console.log('Database migrations completed');
   }
 
@@ -1068,6 +1087,31 @@ class DatabaseManager {
     } catch (error) {
       return false;
     }
+  }
+
+  /**
+   * Update notification settings
+   * @param {object} settings - notification settings object
+   */
+  updateNotificationSettings(settings) {
+    const stmt = this.db.prepare(`
+      UPDATE user_config SET
+        notifications_enabled = ?,
+        notify_toxic = ?,
+        notify_weak = ?,
+        notify_friendly = ?,
+        notify_notable = ?,
+        notify_duo = ?
+      WHERE id = 1
+    `);
+    stmt.run(
+      settings.enabled ? 1 : 0,
+      settings.notifyToxic ? 1 : 0,
+      settings.notifyWeak ? 1 : 0,
+      settings.notifyFriendly ? 1 : 0,
+      settings.notifyNotable ? 1 : 0,
+      settings.notifyDuo ? 1 : 0
+    );
   }
 
   /**

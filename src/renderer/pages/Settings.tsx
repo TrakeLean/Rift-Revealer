@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Save, AlertCircle, CheckCircle2, Download, RefreshCw, Loader2 } from 'lucide-react'
+import { Save, AlertCircle, CheckCircle2, Download, RefreshCw, Loader2, Bell, Info } from 'lucide-react'
 import type { UserConfig } from '../types'
 
 interface SettingsProps {
@@ -28,6 +28,12 @@ export function Settings({ onConfigSaved }: SettingsProps) {
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const [importProgress, setImportProgress] = useState<{ current: number; total: number; imported: number } | null>(null)
   const [importCancelled, setImportCancelled] = useState(false)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const [notifyToxic, setNotifyToxic] = useState(true)
+  const [notifyWeak, setNotifyWeak] = useState(true)
+  const [notifyFriendly, setNotifyFriendly] = useState(true)
+  const [notifyNotable, setNotifyNotable] = useState(true)
+  const [notifyDuo, setNotifyDuo] = useState(false)
 
   useEffect(() => {
     loadConfig()
@@ -51,6 +57,14 @@ export function Settings({ onConfigSaved }: SettingsProps) {
       if (savedConfig) {
         setConfig(savedConfig)
         setAutoUpdateCheck(savedConfig.auto_update_check !== 0) // Default to true if not set
+
+        // Load notification settings (default to OFF for master, but ON for individual tags except duo)
+        setNotificationsEnabled(savedConfig.notifications_enabled === 1)
+        setNotifyToxic(savedConfig.notify_toxic !== 0) // Default to true if not set
+        setNotifyWeak(savedConfig.notify_weak !== 0)
+        setNotifyFriendly(savedConfig.notify_friendly !== 0)
+        setNotifyNotable(savedConfig.notify_notable !== 0)
+        setNotifyDuo(savedConfig.notify_duo === 1) // Default to false
       }
     } catch (error) {
       console.error('Failed to load config:', error)
@@ -90,6 +104,93 @@ export function Settings({ onConfigSaved }: SettingsProps) {
       // Revert on error
       setAutoStart(!checked)
     }
+  }
+
+  const updateNotificationSettings = async (settings: {
+    enabled: boolean
+    notifyToxic: boolean
+    notifyWeak: boolean
+    notifyFriendly: boolean
+    notifyNotable: boolean
+    notifyDuo: boolean
+  }) => {
+    try {
+      await window.api.updateNotificationSettings(settings)
+    } catch (error) {
+      console.error('Failed to save notification settings:', error)
+    }
+  }
+
+  const handleNotificationsEnabledToggle = async (checked: boolean) => {
+    setNotificationsEnabled(checked)
+    await updateNotificationSettings({
+      enabled: checked,
+      notifyToxic,
+      notifyWeak,
+      notifyFriendly,
+      notifyNotable,
+      notifyDuo
+    })
+  }
+
+  const handleNotifyToxicToggle = async (checked: boolean) => {
+    setNotifyToxic(checked)
+    await updateNotificationSettings({
+      enabled: notificationsEnabled,
+      notifyToxic: checked,
+      notifyWeak,
+      notifyFriendly,
+      notifyNotable,
+      notifyDuo
+    })
+  }
+
+  const handleNotifyWeakToggle = async (checked: boolean) => {
+    setNotifyWeak(checked)
+    await updateNotificationSettings({
+      enabled: notificationsEnabled,
+      notifyToxic,
+      notifyWeak: checked,
+      notifyFriendly,
+      notifyNotable,
+      notifyDuo
+    })
+  }
+
+  const handleNotifyFriendlyToggle = async (checked: boolean) => {
+    setNotifyFriendly(checked)
+    await updateNotificationSettings({
+      enabled: notificationsEnabled,
+      notifyToxic,
+      notifyWeak,
+      notifyFriendly: checked,
+      notifyNotable,
+      notifyDuo
+    })
+  }
+
+  const handleNotifyNotableToggle = async (checked: boolean) => {
+    setNotifyNotable(checked)
+    await updateNotificationSettings({
+      enabled: notificationsEnabled,
+      notifyToxic,
+      notifyWeak,
+      notifyFriendly,
+      notifyNotable: checked,
+      notifyDuo
+    })
+  }
+
+  const handleNotifyDuoToggle = async (checked: boolean) => {
+    setNotifyDuo(checked)
+    await updateNotificationSettings({
+      enabled: notificationsEnabled,
+      notifyToxic,
+      notifyWeak,
+      notifyFriendly,
+      notifyNotable,
+      notifyDuo: checked
+    })
   }
 
   const handleCheckForUpdates = async () => {
@@ -403,6 +504,118 @@ export function Settings({ onConfigSaved }: SettingsProps) {
                 {updateStatus}
               </div>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Notifications Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            Notifications
+          </CardTitle>
+          <CardDescription>
+            Get notified when you encounter previously tagged players
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Master toggle */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="notifications-enabled">Enable Notifications</Label>
+              <p className="text-xs text-muted-foreground">
+                Show desktop notifications when tagged players are detected
+              </p>
+            </div>
+            <Switch
+              id="notifications-enabled"
+              checked={notificationsEnabled}
+              onCheckedChange={handleNotificationsEnabledToggle}
+            />
+          </div>
+
+          {/* Tag filters */}
+          <div className={`space-y-3 pt-2 ${!notificationsEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs text-muted-foreground font-medium">Filter by Tag Type</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            {/* Toxic */}
+            <div className="flex items-center justify-between pl-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="notify-toxic" className="text-sm">Toxic</Label>
+              </div>
+              <Switch
+                id="notify-toxic"
+                checked={notifyToxic}
+                onCheckedChange={handleNotifyToxicToggle}
+                disabled={!notificationsEnabled}
+              />
+            </div>
+
+            {/* Weak */}
+            <div className="flex items-center justify-between pl-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="notify-weak" className="text-sm">Weak</Label>
+              </div>
+              <Switch
+                id="notify-weak"
+                checked={notifyWeak}
+                onCheckedChange={handleNotifyWeakToggle}
+                disabled={!notificationsEnabled}
+              />
+            </div>
+
+            {/* Friendly */}
+            <div className="flex items-center justify-between pl-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="notify-friendly" className="text-sm">Friendly</Label>
+              </div>
+              <Switch
+                id="notify-friendly"
+                checked={notifyFriendly}
+                onCheckedChange={handleNotifyFriendlyToggle}
+                disabled={!notificationsEnabled}
+              />
+            </div>
+
+            {/* Notable */}
+            <div className="flex items-center justify-between pl-4">
+              <div className="space-y-0.5">
+                <Label htmlFor="notify-notable" className="text-sm">Notable</Label>
+              </div>
+              <Switch
+                id="notify-notable"
+                checked={notifyNotable}
+                onCheckedChange={handleNotifyNotableToggle}
+                disabled={!notificationsEnabled}
+              />
+            </div>
+
+            {/* Duo */}
+            <div className="flex items-center justify-between pl-4">
+              <div className="space-y-0.5 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="notify-duo" className="text-sm">Duo</Label>
+                  <div
+                    className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-muted text-muted-foreground cursor-help"
+                    title="Disable this to avoid notifications when playing with friends you've tagged as 'Duo'"
+                  >
+                    <Info className="h-2.5 w-2.5" />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">Off by default to avoid friend notifications</p>
+              </div>
+              <Switch
+                id="notify-duo"
+                checked={notifyDuo}
+                onCheckedChange={handleNotifyDuoToggle}
+                disabled={!notificationsEnabled}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
