@@ -891,6 +891,22 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
         isAlly: g.user_team === g.opponent_team
       }));
 
+      // Get player tags
+      const tags = player.puuid ? db.getPlayerTags(player.puuid) : [];
+
+      // Get championName - try from player, then from last seen, or lookup in DB from championId
+      let championName = player.championName || history.stats.enhanced.lastSeen?.champion || null;
+
+      // If still no championName but we have championId, try to get it from database
+      if (!championName && player.championId) {
+        try {
+          const championRow = db.db.prepare('SELECT DISTINCT champion_name FROM match_participants WHERE champion_id = ? LIMIT 1').get(player.championId);
+          championName = championRow?.champion_name || null;
+        } catch (err) {
+          console.log(`Warning: Could not lookup champion name for championId ${player.championId}:`, err.message);
+        }
+      }
+
       analysis.push({
         username: player.username,
         tagLine: player.tagLine,
@@ -911,7 +927,8 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
         profileIconId: player.profileIconId || history.stats.enhanced.profileIconId,  // Prefer live icon
         skinId: player.skinId || null,
         championId: player.championId || null,
-        championName: player.championName || null
+        championName: championName,
+        tags: tags  // Include player tags
       });
     }
   }
@@ -926,6 +943,14 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
   // Send update to renderer
   if (mainWindow && !mainWindow.isDestroyed()) {
     console.log('📤 Sending lobby-update event to renderer with', analysis.length, 'players');
+    console.log('  Analysis data sample:', JSON.stringify(analysis.map(p => ({
+      username: p.username,
+      tagLine: p.tagLine,
+      skinId: p.skinId,
+      championId: p.championId,
+      championName: p.championName,
+      hasTags: p.tags && p.tags.length > 0
+    })), null, 2));
     mainWindow.webContents.send('lobby-update', {
       success: true,
       data: { analysis }
@@ -1073,12 +1098,12 @@ async function startGameflowMonitor() {
         case 'InProgress': {
           // Game has started - re-analyze to capture actual champion/skin selections
           // (ChampSelect analysis happens too early before champions are locked)
-          console.log('=== ANALYZING LOBBY (InProgress) ===');
           const lobbyPlayers = await lcuConnector.getLobbyPlayers();
           const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
 
           // Only re-analyze if players changed OR if we haven't analyzed yet
           if (!lastAnalyzedPlayers || playerHash !== lastAnalyzedPlayers) {
+            console.log('=== ANALYZING LOBBY (InProgress) ===');
             // Clear and refresh cache with actual champion/skin data
             if (db?.setLiveSkinSelections) {
               db.setLiveSkinSelections([], true); // clearFirst=true
@@ -1086,8 +1111,6 @@ async function startGameflowMonitor() {
             }
             lastAnalyzedPlayers = playerHash;
             await analyzeLobbyPlayers(lobbyPlayers);
-          } else {
-            console.log('  [InProgress] Players unchanged, skipping re-analysis');
           }
 
           if (mainWindow && !mainWindow.isDestroyed()) {

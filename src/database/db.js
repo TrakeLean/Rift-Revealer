@@ -883,6 +883,9 @@ class DatabaseManager {
         }
       }
 
+      // Get player tags
+      const tags = p.puuid ? this.getPlayerTags(p.puuid) : [];
+
       return {
         ...p,
         encounterCount,
@@ -895,7 +898,8 @@ class DatabaseManager {
         threatLevel,
         allyQuality,
         byMode,
-        games: gamesTransformed
+        games: gamesTransformed,
+        tags
       };
     });
 

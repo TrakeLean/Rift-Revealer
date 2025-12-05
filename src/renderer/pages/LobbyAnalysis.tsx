@@ -630,6 +630,7 @@ export function LobbyAnalysis() {
           encounterCount={encounterCount}
           wins={wins}
           losses={losses}
+          tags={player.tags}
           asEnemy={player.asEnemy || undefined}
           asAlly={player.asAlly || undefined}
           threatLevel={player.threatLevel || undefined}
