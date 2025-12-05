@@ -572,6 +572,9 @@ ipcMain.handle('get-player-history', async (event, username, tagLine, puuid = nu
   }
 });
 
+// DISABLED: Rank fetching requires production API key (not available with development key)
+// See DEVELOPMENT.md for instructions to re-enable when production key is available
+/*
 ipcMain.handle('get-player-rank', async (event, puuid, region) => {
   try {
     // Check cache first (1 hour cache)
@@ -630,6 +633,7 @@ ipcMain.handle('get-player-rank', async (event, puuid, region) => {
     return { success: false, error: error.message };
   }
 });
+*/
 
 ipcMain.handle('analyze-lobby', async () => {
   try {

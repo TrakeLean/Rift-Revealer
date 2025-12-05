@@ -1,6 +1,141 @@
 # Development Context
 
-## 🔥 Current Work Session - 2025-12-04
+## 🔥 Current Work Session - 2025-12-05
+
+### Rank System Disabled (Development API Key Limitation)
+
+**Status:** ⏸️ DISABLED - Waiting for Production API Key
+
+**Why Disabled:**
+The rank fetching system requires access to the `/lol/league/v4/entries/by-summoner/{summonerId}` endpoint, which is **not available with development API keys**. This endpoint requires a production API key.
+
+**What Was Disabled:**
+- Rank fetching in `src/renderer/pages/LobbyAnalysis.tsx` (lines 89-124)
+- Rank display in `src/renderer/components/PlayerChip.tsx` (line 363-364)
+- IPC handler in `src/main.js` (lines 575-636)
+
+**How to Re-Enable When Production Key is Available:**
+
+1. **Uncomment the IPC handler in `src/main.js`:**
+   - Find the commented block starting at line 575: `// DISABLED: Rank fetching requires production API key`
+   - Remove the `/*` and `*/` comment markers around the `ipcMain.handle('get-player-rank', ...)` handler
+
+2. **Uncomment rank fetching in `src/renderer/pages/LobbyAnalysis.tsx`:**
+   - Find the commented block starting at line 89: `// DISABLED: Rank fetching requires production API key`
+   - Remove the `/*` and `*/` comment markers around the rank fetching logic
+
+3. **Uncomment rank display in `src/renderer/components/PlayerChip.tsx`:**
+   - Find line 363: `{/* DISABLED: Rank display requires production API key - see DEVELOPMENT.md */}`
+   - Uncomment line 364: `{/* {rank !== undefined && <RankBadge rank={rank} size="sm" />} */}`
+   - Change it to: `{rank !== undefined && <RankBadge rank={rank} size="sm" />}`
+
+4. **Update your API key in Settings:**
+   - Open Rift Revealer
+   - Navigate to Settings tab
+   - Paste your **production** API key
+   - Click "Save Configuration"
+
+5. **Test the rank display:**
+   - View Last Match Roster
+   - Ranks should now display properly (e.g., "Gold II 75 LP")
+   - Check console logs for successful rank fetches (look for "[Rank]" prefixed logs)
+
+**What the Rank System Does:**
+- Fetches solo queue rank for each player in your last match
+- Displays rank badge next to player cards (Gold II, Platinum IV, etc.)
+- Caches rank data for 1 hour to reduce API calls
+- Shows "Unranked" for players without ranked stats
+
+---
+
+### UI Improvements: Champion Names, Tag System, and Card Layout
+
+**Status:** ✅ COMPLETE - All Changes Implemented
+
+### Session Summary (2025-12-05)
+
+This session focused on UI polish and bug fixes for the Last Match Roster player cards:
+
+**1. Champion Names Display Fix**
+- **Issue:** Champion names weren't appearing on player cards
+- **Root cause:** `lastSeen` prop was hardcoded to `undefined` in LobbyAnalysis.tsx line 590
+- **Fix:** Changed to `lastSeen={player.lastSeen}` to pass the data already being fetched from database
+- **File:** `src/renderer/pages/LobbyAnalysis.tsx`
+
+**2. Champion Name Formatting**
+- **Issue:** Champion names displayed without spaces (e.g., "MasterYi", "MissFortune")
+- **Root cause:** Riot API returns champion names in camelCase format
+- **Fix:** Created `formatChampionName()` helper function using regex `.replace(/([A-Z])/g, ' $1').trim()`
+- **Result:** "MasterYi" → "Master Yi", "MissFortune" → "Miss Fortune"
+- **File:** `src/renderer/components/PlayerChip.tsx` (lines 12-17)
+
+**3. Tag System Enhancement - "Weak" Tag Added**
+- **Rationale:** Users wanted to tag unskilled players separately from toxic players
+- **Implementation:**
+  - Added 'weak' tag type with orange color scheme (warning variant)
+  - Icon: TrendingDown (from lucide-react)
+  - Description: "Unskilled or poor performance"
+- **Files modified:**
+  - `src/renderer/components/PlayerTagMenu.tsx` - Added tag definition and interface
+  - `src/renderer/components/TagPill.tsx` - Added 'warning' variant styling
+  - `src/renderer/components/PlayerChip.tsx` - Updated tag display logic
+
+**Tag System Now Includes:**
+- 🔥 Toxic (red) - Difficult or toxic player
+- ⚠️ Weak (orange) - Unskilled or poor performance
+- 👥 Friendly (green) - Positive teammate
+- ⭐ Notable (yellow) - Skilled or noteworthy
+- 👥 Duo (blue) - Duo queue partner
+
+**4. User Card UI Cleanup**
+- **Issue:** "0 games together" badge displayed on user's own card (always 0)
+- **Fix:** Wrapped encounter count badge in `{encounterCount > 0 && (...)}` conditional
+- **Result:** Badge only shows for players you've actually played with
+- **File:** `src/renderer/components/PlayerChip.tsx` (lines 321-325)
+
+**5. Debug Console Spam Removed**
+- **Issue:** Champion data console.log statements printing every ~3 seconds
+- **Fix:** Removed debug logging from champion display logic
+- **File:** `src/renderer/components/PlayerChip.tsx`
+
+**6. Skin Splash Art Fallback System**
+- **Issue:** Some skin IDs returning 403 Forbidden from Riot CDN (e.g., Lux_49, MissFortune_23)
+- **Root cause:** Not all skin IDs exist in Riot's CDN - some special skins unavailable
+- **Fix:** Implemented automatic fallback chain:
+  1. Try to load specific skin using Image() constructor
+  2. On error, calculate default skin ID (championId + "000")
+  3. Try to load default champion splash (skin 0)
+  4. If that fails, set to null (no background)
+- **Result:** Players always see champion splash art, even when specific skin unavailable
+- **File:** `src/renderer/components/PlayerChip.tsx` (lines 154-205)
+
+**7. Tags Position on User Card**
+- **Issue:** Tags appeared inline with champion name on user's card
+- **Requested:** Move tags to bottom of card for user's own player card only
+- **Implementation:**
+  - Split tag rendering into two conditional blocks
+  - For non-user cards (`encounterCount > 0`): Tags remain inline in ModeStatsRow
+  - For user card (`encounterCount === 0`): Tags render in separate section at bottom with `pt-1` spacing
+- **Result:** User's card shows tags at bottom, other players show tags inline as before
+- **File:** `src/renderer/components/PlayerChip.tsx` (lines 371-450)
+
+### Files Modified This Session:
+- `src/renderer/pages/LobbyAnalysis.tsx` - Fixed lastSeen prop passing
+- `src/renderer/components/PlayerChip.tsx` - Champion formatting, tag logic, encounter badge, skin fallback, tag positioning
+- `src/renderer/components/PlayerTagMenu.tsx` - Added 'weak' tag type
+- `src/renderer/components/TagPill.tsx` - Added 'warning' variant
+
+### Testing Status:
+✅ Champion names displaying correctly with proper spacing
+✅ Weak tag added and functional
+✅ User card no longer shows "0 games" badge
+✅ Debug console spam eliminated
+✅ Skin fallback working for 403 errors
+✅ Tags positioned at bottom of user card only
+
+---
+
+## 🔥 Previous Work Session - 2025-12-04
 
 ### Feature: Player Rank Display in Last Match Roster
 

@@ -1,45 +1,4 @@
 # Riot API Key Information
-
-## Current API Key (2025-12-04)
-
-**API Key:** `RGAPI-1b155835-6973-484e-8252-351cb0e58ffa`
-
-**Status:** Ready to be added to app Settings
-
-**Expiration:** Development keys expire after 24 hours
-- Generated: 2025-12-04
-- Expires: 2025-12-05 (approximately)
-
----
-
-## How to Update API Key in App
-
-1. **Launch Rift Revealer**
-   ```bash
-   npm start
-   ```
-
-2. **Navigate to Settings Tab**
-   - Click "Settings" in the top navigation bar
-
-3. **Enter API Key**
-   - Paste API key: `RGAPI-1b155835-6973-484e-8252-351cb0e58ffa`
-   - Fill in other required fields if not already saved:
-     - Riot ID Username: (e.g., "Trake")
-     - Riot ID Tag: (e.g., "EUW")
-     - Region: (e.g., "euw1")
-
-4. **Save Configuration**
-   - Click "Save Configuration" button
-   - App will validate the API key with Riot API
-
-5. **Verify Rank Display**
-   - View Last Match Roster tab
-   - Player cards should now show rank badges
-   - Example: "Gold II 75 LP"
-
----
-
 ## API Key Endpoints Used
 
 This app requires access to the following Riot API endpoints:

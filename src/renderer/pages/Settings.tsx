@@ -458,7 +458,7 @@ export function Settings({ onConfigSaved }: SettingsProps) {
                 />
               </div>
               <p className="text-xs text-muted-foreground text-center">
-                {importProgress.imported} matches saved successfully
+                {importProgress.imported} new matches saved • {importProgress.current - importProgress.imported} already in database
               </p>
             </div>
           )}

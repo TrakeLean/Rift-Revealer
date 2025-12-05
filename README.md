@@ -45,7 +45,7 @@ Choose your preferred version:
 - **Champion skin splash arts** displayed as player card backgrounds (from Riot's Data Dragon CDN)
 
 ### 🏷️ Player Tagging System
-- Tag players as **Toxic** (red), **Friendly** (green), **Notable** (yellow), or **Duo** (blue)
+- Tag players as **Toxic** (red), **Weak** (orange), **Friendly** (green), **Notable** (yellow), or **Duo** (blue)
 - Add optional notes to remember specific details
 - Tags persist across all future games
 - Visual indicators on player cards
@@ -144,6 +144,7 @@ Mark players for future reference:
 1. Click the **tag icon** (🏷️) on any player card
 2. Select tag type(s):
    - **Toxic** - Difficult or toxic players
+   - **Weak** - Unskilled or poor performance
    - **Friendly** - Positive teammates
    - **Notable** - Skilled or noteworthy players
    - **Duo** - Duo queue partners

@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-type TagVariant = 'toxic' | 'notable' | 'positive' | 'info'
+type TagVariant = 'toxic' | 'notable' | 'positive' | 'info' | 'warning'
 
 interface TagPillProps {
   label: string
@@ -10,6 +10,7 @@ interface TagPillProps {
 
 const variantClasses: Record<TagVariant, string> = {
   toxic: 'bg-red-950/50 text-red-400 border-red-900',
+  warning: 'bg-orange-950/50 text-orange-400 border-orange-900',
   notable: 'bg-yellow-950/50 text-yellow-400 border-yellow-900',
   positive: 'bg-emerald-950/50 text-emerald-400 border-emerald-900',
   info: 'bg-blue-950/50 text-blue-400 border-blue-900',

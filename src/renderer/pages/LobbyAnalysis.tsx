@@ -86,6 +86,9 @@ export function LobbyAnalysis() {
         setLastRoster(res.data)
         setRosterError(null)
 
+        // DISABLED: Rank fetching requires production API key (not available with development key)
+        // See DEVELOPMENT.md for instructions to re-enable when production key is available
+        /*
         // Fetch ranks for all players in the roster
         const config = await window.api.getUserConfig()
         console.log('[Rank] Config:', config)
@@ -118,6 +121,7 @@ export function LobbyAnalysis() {
           console.log('[Rank] Final ranks:', ranks)
           setPlayerRanks(ranks)
         }
+        */
       } else {
         setLastRoster(null)
         setRosterError(res.error || 'No recent match found. Import matches from Settings to see your last game roster.')
