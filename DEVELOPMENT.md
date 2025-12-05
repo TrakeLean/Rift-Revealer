@@ -554,8 +554,7 @@ Rift-Revealer/
 │       │   └── ErrorBoundary.tsx    # Error handling wrapper
 │       ├── pages/
 │       │   ├── LobbyAnalysis.tsx    # Main lobby detection page
-│       │   ├── Settings.tsx         # Configuration page
-│       │   └── DevPlayground.tsx    # Development testing page
+│       │   └── Settings.tsx         # Configuration page
 │       ├── types/
 │       │   └── index.ts             # TypeScript interfaces
 │       ├── lib/
@@ -752,8 +751,11 @@ Rift-Revealer/
 ### UI Restructure (v1.5.0)
 - **Removed:** Match History page (functionality moved to Settings)
 - **Added:** Top navigation bar (removed sidebar navigation)
-- **Added:** DevPlayground.tsx for development testing
 - **Changed:** Settings now a dedicated tab instead of modal
+
+### DevPlayground Removal (v1.7.2)
+- **Removed:** DevPlayground.tsx development testing page
+- **Reason:** Not needed for production users, simplified navigation
 
 ### New Components Added
 - **UpdateNotification.tsx** - Custom update notification dialog
@@ -990,6 +992,67 @@ npm run rebuild
 **TypeScript errors:**
 - Run `npm run build` to see full error list
 - Check type definitions in `src/renderer/types/index.ts`
+
+---
+
+## Known Bugs
+
+### UI Issues
+
+**1. Tag Button Click Propagation**
+- **Issue**: When clicking the tag button on a player card, it opens the tag menu but also expands/collapses the card dropdown in the background
+- **Impact**: When closing the tag menu, the card dropdown also closes, creating a messy visual experience
+- **Root Cause**: Click event is propagating from the tag button down to the parent card's onClick handler
+- **Expected Behavior**: Tag button click should not trigger card expansion/collapse
+- **Files Affected**:
+  - `src/renderer/components/PlayerChip.tsx` - Tag button onClick handler (lines ~342-357)
+  - Need to add `e.stopPropagation()` to prevent event bubbling
+- **Fix**: Add proper event stopping in the tag button's onClick handler (currently using `onPointerDown` with stopPropagation, but may need to also handle `onClick`)
+- **Priority**: Medium - UX issue but not breaking functionality
+
+**2. Dev Tab Visible in Production Builds** ✅ FIXED (v1.7.2)
+- **Issue**: The "Dev" tab (DevPlayground) is showing for all users who download the packaged app
+- **Impact**: Confusing for end users, exposes development/testing features
+- **Solution**: Completely removed DevPlayground component and all references
+- **Files Changed**:
+  - `src/renderer/App.tsx` - Removed DevPlayground import, removed 'dev' from Page type, removed navigation item
+  - `src/renderer/pages/DevPlayground.tsx` - DELETED
+- **Status**: ✅ Fixed - DevPlayground completely removed from codebase
+
+**3. Excessive Console Logging - DDragon Avatar URLs**
+- **Issue**: Console is spammed with repeated `[DDragon] Building avatar URLs...` and `[DDragon] Avatar sources: Array(3)...` messages
+- **Impact**: Console becomes unusable, performance impact from excessive logging
+- **When**: During games, after games, when refreshing Lobby Analysis tab
+- **Root Cause**: Debug logging left in production code in `PlayerChip.tsx` lines 166, 173
+- **Files Affected**:
+  - `src/renderer/components/PlayerChip.tsx` - Lines ~166, 173 (avatar URL logging)
+- **Fix**: Remove or wrap debug logs in `if (import.meta.env.DEV)` checks
+- **Priority**: Medium - Doesn't break functionality but clutters development
+
+**4. 403 Forbidden Errors - Profile Icons & Champion Splashes**
+- **Issue**: Repeated 403 (Forbidden) errors when loading images from Riot DDragon CDN
+- **Impact**: Missing profile icons and champion splash images, console spam
+- **Affected URLs**:
+  - Profile icons: `https://ddragon.leagueoflegends.com/cdn/15.24.1/img/profileicon/{122,98,141,321,134,412,89,500}.png`
+  - Champion splashes: `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/{Caitlyn_7,Veigar_14,DrMundo_17}.jpg`
+- **Root Cause**:
+  - Old/invalid profile icon IDs (122, 98, 141, etc.) may have been removed from Riot's CDN
+  - Some skin IDs don't exist on CDN (similar to previous skin fallback issue)
+- **Current Behavior**: Falls back to default icon (0.png) then logo.png per fallback chain
+- **Potential Issues**:
+  - May be using outdated profile icon IDs from old match data
+  - DDragon version mismatch (using 15.24.1 but icons may be from older patches)
+  - Double-calling profile icons (needs investigation)
+- **Files Affected**:
+  - `src/renderer/components/PlayerChip.tsx` - Avatar fallback logic (~166-173)
+  - `src/renderer/pages/LobbyAnalysis.tsx` - DDragon version detection
+  - Database may contain invalid profile icon IDs
+- **Fix Options**:
+  1. Validate profile icon IDs exist before using them
+  2. Use latest DDragon version that has those icons
+  3. Add better error handling to suppress 403 errors for known-missing icons
+  4. Investigate why icons are being called multiple times (React re-renders?)
+- **Priority**: Medium - Fallback works but causes console spam and network overhead
 
 ---
 
