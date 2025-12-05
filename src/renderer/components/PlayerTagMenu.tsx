@@ -171,7 +171,10 @@ export function PlayerTagMenu({
                 <div key={tagDef.type} className="space-y-2">
                   {/* Tag Toggle Button */}
                   <button
-                    onClick={() => toggleTag(tagDef.type)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleTag(tagDef.type)
+                    }}
                     className={cn(
                       "w-full flex items-center gap-3 p-3 rounded-md border transition-all",
                       "hover:bg-muted/30",
@@ -225,12 +228,21 @@ export function PlayerTagMenu({
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenChange(false)
+            }}
             disabled={saving}
           >
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleSave()
+            }}
+            disabled={saving}
+          >
             {saving ? 'Saving...' : 'Save Tags'}
           </Button>
         </DialogFooter>
