@@ -2,18 +2,16 @@ import { useState, useEffect } from 'react'
 import { Settings as SettingsPage } from './pages/Settings'
 import { LobbyAnalysis } from './pages/LobbyAnalysis'
 import { Button } from './components/ui/button'
-import { Home, Minus, Square, X, Wrench, Cog, Settings as SettingsIcon } from 'lucide-react'
+import { Home, Minus, Square, X, Settings as SettingsIcon } from 'lucide-react'
 import { cn } from './lib/utils'
 import ErrorBoundary from './components/ErrorBoundary'
 import { UpdateNotification } from './components/UpdateNotification'
-import { DevPlayground } from './pages/DevPlayground'
 
-type Page = 'lobby' | 'settings' | 'dev'
+type Page = 'lobby' | 'settings'
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('lobby')
   const [appVersion, setAppVersion] = useState<string>('...')
-  const isDev = import.meta.env.DEV || import.meta.env.MODE === 'development'
 
   useEffect(() => {
     window.api.getAppVersion().then(setAppVersion)
@@ -22,7 +20,6 @@ function App() {
   const navigationItems = [
     { id: 'lobby' as Page, label: 'Lobby Analysis', icon: Home },
     { id: 'settings' as Page, label: 'Settings', icon: SettingsIcon },
-    ...(isDev ? [{ id: 'dev' as Page, label: 'Dev', icon: Wrench }] : []),
   ]
 
   const handleMinimize = () => {
@@ -113,7 +110,6 @@ function App() {
           <ErrorBoundary key={currentPage}>
             {currentPage === 'lobby' && <LobbyAnalysis />}
             {currentPage === 'settings' && <SettingsPage />}
-            {isDev && currentPage === 'dev' && <DevPlayground />}
           </ErrorBoundary>
         </div>
       </main>
