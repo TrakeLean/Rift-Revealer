@@ -1019,15 +1019,14 @@ npm run rebuild
   - `src/renderer/pages/DevPlayground.tsx` - DELETED
 - **Status**: ✅ Fixed - DevPlayground completely removed from codebase
 
-**3. Excessive Console Logging - DDragon Avatar URLs**
+**3. Excessive Console Logging - DDragon Avatar URLs** ✅ FIXED (v1.7.2)
 - **Issue**: Console is spammed with repeated `[DDragon] Building avatar URLs...` and `[DDragon] Avatar sources: Array(3)...` messages
 - **Impact**: Console becomes unusable, performance impact from excessive logging
-- **When**: During games, after games, when refreshing Lobby Analysis tab
-- **Root Cause**: Debug logging left in production code in `PlayerChip.tsx` lines 166, 173
-- **Files Affected**:
-  - `src/renderer/components/PlayerChip.tsx` - Lines ~166, 173 (avatar URL logging)
-- **Fix**: Remove or wrap debug logs in `if (import.meta.env.DEV)` checks
-- **Priority**: Medium - Doesn't break functionality but clutters development
+- **Solution**: Removed all debug console.log statements from PlayerChip.tsx
+- **Files Changed**:
+  - `src/renderer/components/PlayerChip.tsx` - Removed 7 debug log statements (lines 117-127, 247, 254)
+  - Kept only error logging for actual failures
+- **Status**: ✅ Fixed - Console no longer spammed with DDragon logs
 
 **4. 403 Forbidden Errors - Profile Icons & Champion Splashes**
 - **Issue**: Repeated 403 (Forbidden) errors when loading images from Riot DDragon CDN
