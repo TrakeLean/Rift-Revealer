@@ -9,6 +9,9 @@ import { cn } from '@/lib/utils'
 import { User, ChevronDown, ChevronUp, Tag } from 'lucide-react'
 import type { SplitStats, GameMode, ModeStats } from '../types'
 
+// Global cache for validated image URLs (persists across component remounts)
+const imageValidationCache = new Map<string, boolean>()
+
 // Format champion names by adding spaces before capital letters
 const formatChampionName = (name: string): string => {
   if (!name) return name
@@ -249,10 +252,22 @@ export function PlayerChip({
     let cancelled = false
 
     const validateImage = async (url: string): Promise<boolean> => {
+      // Check cache first
+      const cached = imageValidationCache.get(url)
+      if (cached !== undefined) {
+        return cached
+      }
+
       return new Promise((resolve) => {
         const img = new Image()
-        img.onload = () => resolve(true)
-        img.onerror = () => resolve(false)
+        img.onload = () => {
+          imageValidationCache.set(url, true)
+          resolve(true)
+        }
+        img.onerror = () => {
+          imageValidationCache.set(url, false)
+          resolve(false)
+        }
         img.src = url
       })
     }

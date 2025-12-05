@@ -288,7 +288,6 @@ export function LobbyAnalysis() {
       try {
         const result = await window.api.getDDragonVersion()
         if (result.success && result.version) {
-          console.log('[LobbyAnalysis] DDragon version:', result.version)
           setDdragonVersion(result.version)
         }
       } catch (error) {
