@@ -1028,30 +1028,23 @@ npm run rebuild
   - Kept only error logging for actual failures
 - **Status**: ✅ Fixed - Console no longer spammed with DDragon logs
 
-**4. 403 Forbidden Errors - Profile Icons & Champion Splashes**
+**4. 403 Forbidden Errors - Profile Icons & Champion Splashes** ✅ FIXED (v1.7.2)
 - **Issue**: Repeated 403 (Forbidden) errors when loading images from Riot DDragon CDN
 - **Impact**: Missing profile icons and champion splash images, console spam
-- **Affected URLs**:
-  - Profile icons: `https://ddragon.leagueoflegends.com/cdn/15.24.1/img/profileicon/{122,98,141,321,134,412,89,500}.png`
-  - Champion splashes: `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/{Caitlyn_7,Veigar_14,DrMundo_17}.jpg`
-- **Root Cause**:
-  - Old/invalid profile icon IDs (122, 98, 141, etc.) may have been removed from Riot's CDN
-  - Some skin IDs don't exist on CDN (similar to previous skin fallback issue)
-- **Current Behavior**: Falls back to default icon (0.png) then logo.png per fallback chain
-- **Potential Issues**:
-  - May be using outdated profile icon IDs from old match data
-  - DDragon version mismatch (using 15.24.1 but icons may be from older patches)
-  - Double-calling profile icons (needs investigation)
-- **Files Affected**:
-  - `src/renderer/components/PlayerChip.tsx` - Avatar fallback logic (~166-173)
-  - `src/renderer/pages/LobbyAnalysis.tsx` - DDragon version detection
-  - Database may contain invalid profile icon IDs
-- **Fix Options**:
-  1. Validate profile icon IDs exist before using them
-  2. Use latest DDragon version that has those icons
-  3. Add better error handling to suppress 403 errors for known-missing icons
-  4. Investigate why icons are being called multiple times (React re-renders?)
-- **Priority**: Medium - Fallback works but causes console spam and network overhead
+- **Root Cause**: Old/invalid profile icon IDs from match data that no longer exist on Riot's CDN
+- **Solution**: Implemented pre-validation using JavaScript Image() API
+- **How it Works**:
+  1. Images are tested silently using `new Image()` before rendering
+  2. Only successfully loaded images are displayed
+  3. Falls back through chain: profile icon → default icon (0.png) → logo.png
+  4. All validation happens in memory, no console errors
+- **Files Changed**:
+  - `src/renderer/components/PlayerChip.tsx`:
+    - Added `validatedAvatar` state with async validation
+    - Removed `imageIndex` state (no longer needed)
+    - Removed `onError` handler (validation happens before render)
+    - Added `findValidImage()` function to test each source
+- **Status**: ✅ Fixed - 403 errors no longer spam console, images load cleanly
 
 ---
 
