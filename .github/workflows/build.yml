@@ -77,6 +77,9 @@ jobs:
           name: windows-build
           path: dist
 
+      - name: List downloaded files
+        run: ls -lah dist/
+
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
@@ -100,16 +103,13 @@ jobs:
           fi
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: Rift Revealer v${{ steps.version.outputs.VERSION }}
           body_path: changelog_section.txt
-          files: |
-            dist/*.exe
-            dist/*.exe.blockmap
-            dist/latest.yml
-            dist/*.yml
+          files: dist/*
           draft: false
           prerelease: false
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
