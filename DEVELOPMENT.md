@@ -999,16 +999,15 @@ npm run rebuild
 
 ### UI Issues
 
-**1. Tag Button Click Propagation**
+**1. Tag Button Click Propagation** ✅ FIXED (v1.7.2)
 - **Issue**: When clicking the tag button on a player card, it opens the tag menu but also expands/collapses the card dropdown in the background
 - **Impact**: When closing the tag menu, the card dropdown also closes, creating a messy visual experience
-- **Root Cause**: Click event is propagating from the tag button down to the parent card's onClick handler
-- **Expected Behavior**: Tag button click should not trigger card expansion/collapse
-- **Files Affected**:
-  - `src/renderer/components/PlayerChip.tsx` - Tag button onClick handler (lines ~342-357)
-  - Need to add `e.stopPropagation()` to prevent event bubbling
-- **Fix**: Add proper event stopping in the tag button's onClick handler (currently using `onPointerDown` with stopPropagation, but may need to also handle `onClick`)
-- **Priority**: Medium - UX issue but not breaking functionality
+- **Root Cause**: Conflicting event handlers - both `onPointerDown` and `onClick` were being used
+- **Solution**: Removed redundant `onPointerDown` handler, kept only `onClick` with stopPropagation
+- **Files Changed**:
+  - `src/renderer/components/PlayerChip.tsx` - Removed onPointerDown handler from tag button (lines 372-375)
+  - onClick handler already had proper `e.stopPropagation()` and `e.preventDefault()`
+- **Status**: ✅ Fixed - Tag button click no longer triggers card expansion/collapse
 
 **2. Dev Tab Visible in Production Builds** ✅ FIXED (v1.7.2)
 - **Issue**: The "Dev" tab (DevPlayground) is showing for all users who download the packaged app

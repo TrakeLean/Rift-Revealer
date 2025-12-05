@@ -369,10 +369,6 @@ export function PlayerChip({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-muted-foreground hover:text-primary/80 hover:bg-white/5"
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  e.preventDefault()
-                }}
                 onClick={handleTagButtonClick}
                 title="Tag player"
               >
