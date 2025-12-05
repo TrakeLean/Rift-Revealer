@@ -91,7 +91,6 @@ export function PlayerChip({
   const summonerName = `${username}#${tagLine}`
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
   const [playerTags, setPlayerTags] = useState<any[]>(tagsProp || [])
-  const [imageIndex, setImageIndex] = useState(0)
   const [skinImageSrc, setSkinImageSrc] = useState<string | null>(null)
   const [ddragonVersion, setDdragonVersion] = useState<string>(ddragonVersionProp || '15.24.1') // Use prop or fallback
   const isClickable = Boolean(onClick)
@@ -227,10 +226,6 @@ export function PlayerChip({
     }
   }, [skinId, championName, championId])
 
-  // Reset image fallback when source set changes
-  useEffect(() => {
-    setImageIndex(0)
-  }, [skinId, profileIconId, championName, skinImageSrc])
 
   const hasProfileIcon = profileIconId !== null && profileIconId !== undefined
 
@@ -247,8 +242,48 @@ export function PlayerChip({
     return sources
   }, [ddragonVersion, hasProfileIcon, profileIconId])
 
+  // Preload and validate avatar image to prevent 403 console spam
+  const [validatedAvatar, setValidatedAvatar] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const validateImage = async (url: string): Promise<boolean> => {
+      return new Promise((resolve) => {
+        const img = new Image()
+        img.onload = () => resolve(true)
+        img.onerror = () => resolve(false)
+        img.src = url
+      })
+    }
+
+    const findValidImage = async () => {
+      for (const src of avatarSources) {
+        if (cancelled) break
+
+        // Logo.png is always valid, no need to validate
+        if (src === 'logo.png') {
+          setValidatedAvatar(src)
+          break
+        }
+
+        const isValid = await validateImage(src)
+        if (isValid && !cancelled) {
+          setValidatedAvatar(src)
+          break
+        }
+      }
+    }
+
+    findValidImage()
+
+    return () => {
+      cancelled = true
+    }
+  }, [avatarSources])
+
   const backgroundSrc = skinImageSrc // Skin background from Community Dragon CDN
-  const currentSrc = avatarSources[imageIndex]
+  const currentSrc = validatedAvatar
 
   // Helper to format time ago
   const formatTimeAgo = (date: Date) => {
@@ -324,7 +359,6 @@ export function PlayerChip({
                   src={currentSrc}
                   alt={`${summonerName}'s avatar`}
                   className="h-8 w-8 rounded-md border border-border flex-shrink-0 object-cover"
-                  onError={() => setImageIndex(i => i + 1)}
                 />
               ) : null}
               <User className={cn("h-4 w-4 text-muted-foreground flex-shrink-0", currentSrc && "hidden")} />
