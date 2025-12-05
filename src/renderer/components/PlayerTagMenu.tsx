@@ -12,10 +12,10 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { TagPill } from './TagPill'
 import { cn } from '@/lib/utils'
-import { Tag, Flame, Star, Users, X } from 'lucide-react'
+import { Tag, Flame, Star, Users, X, TrendingDown } from 'lucide-react'
 
 interface PlayerTag {
-  tag_type: 'toxic' | 'friendly' | 'notable' | 'duo'
+  tag_type: 'toxic' | 'friendly' | 'notable' | 'duo' | 'weak'
   note: string | null
   created_at: number
 }
@@ -37,6 +37,13 @@ const TAG_DEFINITIONS = [
     icon: Flame,
     description: 'Difficult or toxic player',
     variant: 'toxic' as const
+  },
+  {
+    type: 'weak' as const,
+    label: 'Weak',
+    icon: TrendingDown,
+    description: 'Unskilled or poor performance',
+    variant: 'warning' as const
   },
   {
     type: 'friendly' as const,
@@ -177,6 +184,7 @@ export function PlayerTagMenu({
                       "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors",
                       isSelected
                         ? tagDef.variant === 'toxic' ? "bg-red-950/50 text-red-400" :
+                          tagDef.variant === 'warning' ? "bg-orange-950/50 text-orange-400" :
                           tagDef.variant === 'positive' ? "bg-emerald-950/50 text-emerald-400" :
                           tagDef.variant === 'notable' ? "bg-yellow-950/50 text-yellow-400" :
                           "bg-blue-950/50 text-blue-400"

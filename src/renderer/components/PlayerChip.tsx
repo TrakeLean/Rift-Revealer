@@ -305,7 +305,7 @@ export function PlayerChip({
       }
     : undefined
   const sectionTone = backgroundSrc ? 'bg-black/30' : 'bg-muted/20'
-  const sectionClass = cn('inline-block max-w-full rounded-md px-2 py-1', sectionTone)
+  const sectionClass = cn('w-fit max-w-full rounded-md px-2 py-1', sectionTone)
 
   return (
     <Card
@@ -360,7 +360,8 @@ export function PlayerChip({
                   {encounterCount} {encounterCount === 1 ? 'game' : 'games'}
                 </span>
               )}
-              {rank !== undefined && <RankBadge rank={rank} size="sm" />}
+              {/* DISABLED: Rank display requires production API key - see DEVELOPMENT.md */}
+              {/* {rank !== undefined && <RankBadge rank={rank} size="sm" />} */}
               {isClickable && (
                 isExpanded ? (
                   <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -377,7 +378,7 @@ export function PlayerChip({
               <div className="flex gap-2 text-[11px] flex-wrap items-center">
                 {/* Ally Stats (shown first) */}
                 {asAlly && asAlly.games > 0 && (
-                  <div className="flex items-center gap-1 flex-1 min-w-[140px]">
+                  <div className="flex items-center gap-1">
                     <span className="text-[11px] text-emerald-400/70 uppercase font-medium">Teammate:</span>
                     <span className={cn("font-bold", getAllyColor(allyQuality))}>
                       {asAlly.wins}-{asAlly.losses}
@@ -390,7 +391,7 @@ export function PlayerChip({
 
                 {/* Enemy Stats */}
                 {asEnemy && asEnemy.games > 0 && (
-                  <div className="flex items-center gap-1 flex-1 min-w-[140px]">
+                  <div className="flex items-center gap-1">
                     <span className="text-[11px] text-red-400/70 uppercase font-medium">Opponent:</span>
                     <span className={cn("font-bold", getThreatColor(threatLevel))}>
                       {asEnemy.wins}-{asEnemy.losses}

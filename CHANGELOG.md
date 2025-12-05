@@ -5,6 +5,26 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2025-12-05
+
+### Changed
+- **Rank display temporarily disabled**: Rank fetching requires production API key (not available with development key)
+- Player card stats section background now properly fits content width instead of stretching full width
+- Updated README.md to include "Weak" tag in player tagging system documentation
+
+### Fixed
+- Player stats background (`bg-black/30`) no longer stretches across full horizontal space when displaying teammate/opponent stats
+- Changed from `inline-block` to `w-fit` for proper content-fitting behavior
+- Removed `flex-1` from stat containers to prevent unnecessary expansion
+
+### Technical Details
+- Rank system fully commented out in preparation for production API key:
+  - `src/main.js` - IPC handler for `get-player-rank` disabled (lines 575-636)
+  - `src/renderer/pages/LobbyAnalysis.tsx` - Rank fetching logic disabled (lines 89-124)
+  - `src/renderer/components/PlayerChip.tsx` - Rank badge display hidden (line 363-364)
+- Added comprehensive re-enable instructions in `DEVELOPMENT.md`
+- Updated GitHub Actions workflow with better debugging and error handling (v2 of release action)
+
 ## [1.7.0] - 2025-12-04
 
 ### Changed
