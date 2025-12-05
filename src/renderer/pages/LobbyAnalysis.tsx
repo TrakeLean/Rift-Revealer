@@ -668,109 +668,51 @@ export function LobbyAnalysis() {
             <CardContent>
               {detectedPlayers.length > 0 ? (
                 <div className="space-y-3">
-                  {/* Group players into rows of 2 for grid layout */}
-                  {Array.from({ length: Math.ceil(detectedPlayers.length / 2) }).map((_, rowIdx) => {
-                    const leftPlayer = detectedPlayers[rowIdx * 2]
-                    const rightPlayer = detectedPlayers[rowIdx * 2 + 1]
-
-                    // Check if either player is expanded
-                    const leftKey = leftPlayer ? formatRiotId(leftPlayer.username, leftPlayer.tagLine) : null
-                    const rightKey = rightPlayer ? formatRiotId(rightPlayer.username, rightPlayer.tagLine) : null
-                    const expandedData = expandedPlayer && detectedPlayers.find(p =>
-                      formatRiotId(p.username, p.tagLine) === expandedPlayer
-                    )
-                    const isThisRowExpanded = expandedPlayer === leftKey || expandedPlayer === rightKey
-
+                  {detectedPlayers.map((player) => {
+                    const hasDetails = Boolean(player.asEnemy || player.asAlly || (player.games && player.games.length > 0));
+                    const playerKey = formatRiotId(player.username, player.tagLine);
+                    const isSelected = expandedPlayer === playerKey;
                     return (
-                      <div key={`row-${rowIdx}`} className="space-y-2">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {/* Left player */}
-                          {leftPlayer && (() => {
-                            const hasDetails = Boolean(leftPlayer.asEnemy || leftPlayer.asAlly || (leftPlayer.games && leftPlayer.games.length > 0))
-                            const playerKey = formatRiotId(leftPlayer.username, leftPlayer.tagLine)
-                            const isSelected = expandedPlayer === playerKey
+                      <div key={playerKey} className="space-y-2">
+                        <PlayerChip
+                          puuid={player.puuid}
+                          username={player.username}
+                          tagLine={player.tagLine}
+                          encounterCount={player.encounterCount}
+                          wins={player.wins}
+                          losses={player.losses}
+                          tags={player.tags}
+                          asEnemy={player.asEnemy}
+                          asAlly={player.asAlly}
+                          lastSeen={player.lastSeen}
+                          threatLevel={player.threatLevel}
+                          allyQuality={player.allyQuality}
+                          byMode={player.byMode}
+                          profileIconId={player.profileIconId ?? undefined}
+                          skinId={player.skinId ?? undefined}
+                          championName={player.championName ?? undefined}
+                          championId={player.championId ?? undefined}
+                          ddragonVersion={ddragonVersion}
+                          onClick={hasDetails ? () => togglePlayerExpansion(playerKey) : undefined}
+                          isExpanded={isSelected}
+                          className={cn("h-full", isSelected && "ring-1 ring-primary/60")}
+                        />
 
-                            return (
-                              <div className="space-y-2 h-full">
-                                <PlayerChip
-                                  puuid={leftPlayer.puuid}
-                                  username={leftPlayer.username}
-                                  tagLine={leftPlayer.tagLine}
-                                  encounterCount={leftPlayer.encounterCount}
-                                  wins={leftPlayer.wins}
-                                  losses={leftPlayer.losses}
-                                  tags={leftPlayer.tags}
-                                  asEnemy={leftPlayer.asEnemy}
-                                  asAlly={leftPlayer.asAlly}
-                                  lastSeen={leftPlayer.lastSeen}
-                                  threatLevel={leftPlayer.threatLevel}
-                                  allyQuality={leftPlayer.allyQuality}
-                                  byMode={leftPlayer.byMode}
-                                  profileIconId={leftPlayer.profileIconId ?? undefined}
-                                  skinId={leftPlayer.skinId ?? undefined}
-                                  championName={leftPlayer.championName ?? undefined}
-                                  championId={leftPlayer.championId ?? undefined}
-                                  ddragonVersion={ddragonVersion}
-                                  onClick={hasDetails ? () => togglePlayerExpansion(playerKey) : undefined}
-                                  isExpanded={isSelected}
-                                  className={cn("h-full", isSelected && "ring-1 ring-primary/60")}
-                                />
-                              </div>
-                            )
-                          })()}
-
-                          {/* Right player */}
-                          {rightPlayer && (() => {
-                            const hasDetails = Boolean(rightPlayer.asEnemy || rightPlayer.asAlly || (rightPlayer.games && rightPlayer.games.length > 0))
-                            const playerKey = formatRiotId(rightPlayer.username, rightPlayer.tagLine)
-                            const isSelected = expandedPlayer === playerKey
-
-                            return (
-                              <div className="space-y-2 h-full">
-                                <PlayerChip
-                                  puuid={rightPlayer.puuid}
-                                  username={rightPlayer.username}
-                                  tagLine={rightPlayer.tagLine}
-                                  encounterCount={rightPlayer.encounterCount}
-                                  wins={rightPlayer.wins}
-                                  losses={rightPlayer.losses}
-                                  tags={rightPlayer.tags}
-                                  asEnemy={rightPlayer.asEnemy}
-                                  asAlly={rightPlayer.asAlly}
-                                  lastSeen={rightPlayer.lastSeen}
-                                  threatLevel={rightPlayer.threatLevel}
-                                  allyQuality={rightPlayer.allyQuality}
-                                  byMode={rightPlayer.byMode}
-                                  profileIconId={rightPlayer.profileIconId ?? undefined}
-                                  skinId={rightPlayer.skinId ?? undefined}
-                                  championName={rightPlayer.championName ?? undefined}
-                                  championId={rightPlayer.championId ?? undefined}
-                                  ddragonVersion={ddragonVersion}
-                                  onClick={hasDetails ? () => togglePlayerExpansion(playerKey) : undefined}
-                                  isExpanded={isSelected}
-                                  className={cn("h-full", isSelected && "ring-1 ring-primary/60")}
-                                />
-                              </div>
-                            )
-                          })()}
-                        </div>
-
-                        {/* Expanded details (full width below the row) */}
-                        {isThisRowExpanded && expandedData && (
+                        {isSelected && (
                           <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
-                            {(expandedData.asEnemy || expandedData.asAlly) && (
+                            {(player.asEnemy || player.asAlly) && (
                               <StatsPanel
-                                asEnemy={expandedData.asEnemy || undefined}
-                                asAlly={expandedData.asAlly || undefined}
+                                asEnemy={player.asEnemy}
+                                asAlly={player.asAlly}
                               />
                             )}
-                            {expandedData.games && expandedData.games.length > 0 && (
+                            {player.games && player.games.length > 0 && (
                               <div className="space-y-2">
                                 <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
                                   Recent Games
                                 </p>
                                 <div className="space-y-2">
-                                  {expandedData.games.slice(0, 5).map((match, idx2) => (
+                                  {player.games.slice(0, 5).map((match, idx2) => (
                                     <MatchCard
                                       key={idx2}
                                       gameId={match.gameId}
@@ -780,9 +722,9 @@ export function LobbyAnalysis() {
                                       timestamp={new Date(match.timestamp)}
                                     />
                                   ))}
-                                  {expandedData.games.length > 5 && (
+                                  {player.games.length > 5 && (
                                     <p className="text-xs text-muted-foreground text-center py-2">
-                                      + {expandedData.games.length - 5} more games
+                                      + {player.games.length - 5} more games
                                     </p>
                                   )}
                                 </div>
@@ -791,7 +733,7 @@ export function LobbyAnalysis() {
                           </div>
                         )}
                       </div>
-                    )
+                    );
                   })}
                 </div>
               ) : (
