@@ -877,7 +877,14 @@ async function startGameflowMonitor() {
       // Log state transitions
       if (newState !== currentGameflowState) {
         console.log(`\n=== GAMEFLOW STATE CHANGE: ${currentGameflowState} -> ${newState} ===`);
+        const previousState = currentGameflowState;
         currentGameflowState = newState;
+
+        // Clear skin cache when transitioning INTO Lobby state (new lobby starting)
+        if (newState === 'Lobby' && db?.setLiveSkinSelections) {
+          db.setLiveSkinSelections([], true); // clearFirst=true for new lobby
+          console.log('  [Skin Cache] Cleared for new lobby');
+        }
 
         // Send state update to renderer
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -897,11 +904,6 @@ async function startGameflowMonitor() {
           // Waiting for champion select - clear any previous analysis
           lastAnalyzedPlayers = null;
           gameImported = false; // Reset import flag when entering new lobby
-          // Clear skin cache when starting a new lobby (not just state transitions within same game)
-          if (currentGameflowState === 'Lobby' && db?.setLiveSkinSelections) {
-            db.setLiveSkinSelections([], true); // clearFirst=true for new lobby
-            console.log('  [Skin Cache] Cleared for new lobby');
-          }
           if (mainWindow && !mainWindow.isDestroyed()) {
             const queueId = gameflowSession?.queue?.id || gameflowSession?.gameData?.queue?.id || 0;
             const queueName = getQueueName(queueId);
