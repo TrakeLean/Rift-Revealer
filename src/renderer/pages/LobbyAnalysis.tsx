@@ -50,6 +50,13 @@ const LIVE_STATES = ['champselect', 'champ select', 'championselect', 'inprogres
 // Persist last lobby analysis/status across tab switches
 let cachedDetectedPlayers: AnalysisResult[] = []
 let cachedStatus: { message: string; type: 'success' | 'error' | 'info' | 'warning' } | null = null
+let cachedGameflowStatus: {
+  state: string
+  message: string
+  isAnonymized?: boolean
+  queueId?: number | string
+  queueName?: string
+} | null = null
 
 export function LobbyAnalysis() {
   const [detectedPlayers, setDetectedPlayers] = useState<AnalysisResult[]>([])
@@ -298,9 +305,15 @@ export function LobbyAnalysis() {
   }, [])
 
   useEffect(() => {
+    // Restore cached gameflow status on mount
+    if (cachedGameflowStatus) {
+      setGameflowStatus(cachedGameflowStatus)
+    }
+
     // Listen for gameflow status updates
     const cleanupStatus = window.api.onGameflowStatus((data) => {
       setGameflowStatus(data)
+      cachedGameflowStatus = data
 
       const stateRaw = data.state || ''
       const normalized = stateRaw.trim().toLowerCase()
