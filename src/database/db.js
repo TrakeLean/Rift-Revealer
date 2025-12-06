@@ -813,6 +813,179 @@ class DatabaseManager {
   }
 
   /**
+   * Get the user's own overall stats grouped by game mode.
+   * Used to display mode badges on the user's own card.
+   */
+  getUserOwnStats() {
+    const config = this.getUserConfig();
+    if (!config?.puuid) {
+      return null;
+    }
+
+    // Get all matches for the user
+    const matchesStmt = this.db.prepare(`
+      SELECT
+        m.match_id,
+        m.queue_id,
+        m.game_creation,
+        mp.win,
+        mp.placement,
+        mp.champion_name,
+        mp.kills,
+        mp.deaths,
+        mp.assists,
+        mp.lane
+      FROM matches m
+      INNER JOIN match_participants mp ON m.match_id = mp.match_id
+      WHERE mp.puuid = ?
+      ORDER BY m.game_creation DESC
+    `);
+
+    const matches = matchesStmt.all(config.puuid);
+    if (matches.length === 0) {
+      return null;
+    }
+
+    // Group by mode and calculate stats
+    const byMode = {};
+    const gamesByMode = {};
+
+    matches.forEach(match => {
+      const mode = this.categorizeQueue(match.queue_id);
+      if (!gamesByMode[mode]) {
+        gamesByMode[mode] = [];
+      }
+      gamesByMode[mode].push(match);
+    });
+
+    // Calculate stats for each mode (user's overall stats, not split by ally/enemy)
+    Object.entries(gamesByMode).forEach(([mode, games]) => {
+      const isArena = games.length > 0 && games[0].queue_id === 1700;
+
+      if (isArena) {
+        // For Arena: calculate average placement
+        const placements = games
+          .map(g => g.placement)
+          .filter(p => p !== null && p !== undefined);
+
+        const avgPlacement = placements.length > 0
+          ? (placements.reduce((sum, p) => sum + p, 0) / placements.length).toFixed(1)
+          : null;
+
+        // Get top champions
+        const champCounts = {};
+        games.forEach(g => {
+          const champ = g.champion_name;
+          if (!champCounts[champ]) {
+            champCounts[champ] = { games: 0, placements: [] };
+          }
+          champCounts[champ].games++;
+          if (g.placement) {
+            champCounts[champ].placements.push(g.placement);
+          }
+        });
+
+        const topChampions = Object.entries(champCounts)
+          .map(([champion, data]) => ({
+            champion,
+            games: data.games,
+            wins: 0,
+            losses: 0,
+            winRate: 0
+          }))
+          .sort((a, b) => b.games - a.games)
+          .slice(0, 3);
+
+        // Calculate performance stats
+        const totalKills = games.reduce((sum, g) => sum + (g.kills || 0), 0);
+        const totalDeaths = games.reduce((sum, g) => sum + (g.deaths || 0), 0);
+        const totalAssists = games.reduce((sum, g) => sum + (g.assists || 0), 0);
+
+        const performance = {
+          avgKills: (totalKills / games.length).toFixed(1),
+          avgDeaths: (totalDeaths / games.length).toFixed(1),
+          avgAssists: (totalAssists / games.length).toFixed(1),
+          avgKDA: totalDeaths > 0 ? ((totalKills + totalAssists) / totalDeaths).toFixed(2) : (totalKills + totalAssists).toFixed(2)
+        };
+
+        // For user card: put stats in asAlly (since it's their own stats)
+        byMode[mode] = {
+          asAlly: {
+            games: games.length,
+            wins: null,
+            losses: null,
+            winRate: null,
+            avgPlacement: parseFloat(avgPlacement),
+            lastPlayed: new Date(games[0].game_creation),
+            recentForm: games.slice(0, 5).map(g => `#${g.placement}`),
+            topChampions,
+            performance,
+            roleStats: []
+          },
+          asEnemy: null
+        };
+      } else {
+        // Non-Arena: traditional win/loss stats
+        const wins = games.filter(g => g.win === 1).length;
+        const losses = games.length - wins;
+
+        // Get top champions
+        const champCounts = {};
+        games.forEach(g => {
+          const champ = g.champion_name;
+          if (!champCounts[champ]) {
+            champCounts[champ] = { games: 0, wins: 0 };
+          }
+          champCounts[champ].games++;
+          if (g.win === 1) champCounts[champ].wins++;
+        });
+
+        const topChampions = Object.entries(champCounts)
+          .map(([champion, data]) => ({
+            champion,
+            games: data.games,
+            wins: data.wins,
+            losses: data.games - data.wins,
+            winRate: Math.round((data.wins / data.games) * 100)
+          }))
+          .sort((a, b) => b.games - a.games)
+          .slice(0, 3);
+
+        // Calculate performance stats
+        const totalKills = games.reduce((sum, g) => sum + (g.kills || 0), 0);
+        const totalDeaths = games.reduce((sum, g) => sum + (g.deaths || 0), 0);
+        const totalAssists = games.reduce((sum, g) => sum + (g.assists || 0), 0);
+
+        const performance = {
+          avgKills: (totalKills / games.length).toFixed(1),
+          avgDeaths: (totalDeaths / games.length).toFixed(1),
+          avgAssists: (totalAssists / games.length).toFixed(1),
+          avgKDA: totalDeaths > 0 ? ((totalKills + totalAssists) / totalDeaths).toFixed(2) : (totalKills + totalAssists).toFixed(2)
+        };
+
+        // For user card: put stats in asAlly (since it's their own stats)
+        byMode[mode] = {
+          asAlly: {
+            games: games.length,
+            wins,
+            losses,
+            winRate: Math.round((wins / games.length) * 100),
+            avgPlacement: null,
+            lastPlayed: new Date(games[0].game_creation),
+            recentForm: games.slice(0, 5).map(g => g.win === 1 ? 'W' : 'L'),
+            topChampions,
+            performance,
+            roleStats: []
+          },
+          asEnemy: null
+        };
+      }
+    });
+
+    return byMode;
+  }
+
+  /**
    * Get the most recent match roster that includes the configured user.
    * Returns players with team info so the renderer can show a scoreboard-style view.
    */
@@ -936,6 +1109,13 @@ class DatabaseManager {
           }
         } catch (err) {
           console.error(`[Last Match Roster] Error getting history for ${formatRiotId(p.username, p.tagLine)}:`, err.message);
+        }
+      } else {
+        // For the user's own card, get their overall stats by mode
+        try {
+          byMode = this.getUserOwnStats();
+        } catch (err) {
+          console.error(`[Last Match Roster] Error getting user's own stats:`, err.message);
         }
       }
 

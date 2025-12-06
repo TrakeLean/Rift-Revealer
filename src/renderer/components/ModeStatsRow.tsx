@@ -34,8 +34,6 @@ const MODE_CONFIG: Record<GameMode, { icon: typeof Swords; color: string; label:
 }
 
 export function ModeStatsRow({ byMode, children, selectedMode = 'all', onModeSelect, onBadgeClick }: ModeStatsRowProps) {
-  if (!byMode && !children) return null
-
   // Show modes with any recorded games
   const modesWithGames = byMode
     ? Object.entries(byMode).filter(([_, stats]) => {
@@ -44,6 +42,7 @@ export function ModeStatsRow({ byMode, children, selectedMode = 'all', onModeSel
       })
     : []
 
+  // Always render if we have children, even without mode stats
   if (modesWithGames.length === 0 && !children) return null
 
   const handleModeClick = (mode: GameMode | 'all', e: React.MouseEvent) => {
@@ -94,7 +93,7 @@ export function ModeStatsRow({ byMode, children, selectedMode = 'all', onModeSel
             <Badge
               variant={isSelected ? 'default' : 'outline'}
               className={cn(
-                'cursor-pointer transition-all hover:scale-105 gap-1',
+                'cursor-pointer transition-all hover:scale-105 gap-1 bg-black/30 border-border/60',
                 isSelected && 'ring-1 ring-border bg-accent/50'
               )}
               onClick={(e) => handleModeClick(mode as GameMode, e)}

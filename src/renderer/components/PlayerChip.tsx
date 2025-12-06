@@ -558,7 +558,7 @@ export function PlayerChip({
 
           {/* Mode Stats Badges with Tags and Champion */}
           {/* Show mode badges for all cards (including user's own card) */}
-          {(encounterCount > 0 || byMode) && (
+          {(encounterCount > 0 || byMode || playerTags.length > 0 || lastSeen?.champion || championName) && (
             <ModeStatsRow byMode={byMode}>
                 {/* Tags */}
                 {playerTags.length > 0 && (
