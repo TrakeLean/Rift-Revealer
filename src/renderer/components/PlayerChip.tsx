@@ -511,12 +511,22 @@ export function PlayerChip({
                 {asAlly && asAlly.games > 0 && (
                   <div className="flex items-center gap-1">
                     <span className="text-[11px] text-emerald-400/70 uppercase font-medium">Teammate:</span>
-                    <span className={cn("font-bold", getAllyColor(allyQuality))}>
-                      {asAlly.wins}-{asAlly.losses}
-                    </span>
-                    <span className={cn("text-[11px]", getAllyColor(allyQuality))}>
-                      ({asAlly.winRate}%)
-                    </span>
+                    {asAlly.avgPlacement !== null && asAlly.avgPlacement !== undefined ? (
+                      <>
+                        <span className={cn("font-bold", getAllyColor(allyQuality))}>
+                          Avg: #{asAlly.avgPlacement}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className={cn("font-bold", getAllyColor(allyQuality))}>
+                          {asAlly.wins}-{asAlly.losses}
+                        </span>
+                        <span className={cn("text-[11px]", getAllyColor(allyQuality))}>
+                          ({asAlly.winRate}%)
+                        </span>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -524,12 +534,22 @@ export function PlayerChip({
                 {asEnemy && asEnemy.games > 0 && (
                   <div className="flex items-center gap-1">
                     <span className="text-[11px] text-red-400/70 uppercase font-medium">Opponent:</span>
-                    <span className={cn("font-bold", getThreatColor(threatLevel))}>
-                      {asEnemy.wins}-{asEnemy.losses}
-                    </span>
-                    <span className={cn("text-[11px]", getThreatColor(threatLevel))}>
-                      ({asEnemy.winRate}%)
-                    </span>
+                    {asEnemy.avgPlacement !== null && asEnemy.avgPlacement !== undefined ? (
+                      <>
+                        <span className={cn("font-bold", getThreatColor(threatLevel))}>
+                          Avg: #{asEnemy.avgPlacement}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className={cn("font-bold", getThreatColor(threatLevel))}>
+                          {asEnemy.wins}-{asEnemy.losses}
+                        </span>
+                        <span className={cn("text-[11px]", getThreatColor(threatLevel))}>
+                          ({asEnemy.winRate}%)
+                        </span>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

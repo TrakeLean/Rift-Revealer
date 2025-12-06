@@ -119,11 +119,12 @@ export interface PerformanceStats {
 // Split Stats (Enemy vs Ally)
 export interface SplitStats {
   games: number
-  wins: number
-  losses: number
-  winRate: number
+  wins: number | null
+  losses: number | null
+  winRate: number | null
+  avgPlacement?: number | null // For Arena: average placement (1-8)
   lastPlayed?: Date
-  recentForm: ('W' | 'L')[] // Last 5 games
+  recentForm: ('W' | 'L' | string)[] // Last 5 games - W/L for normal modes, "#X" for Arena placements
   topChampions: ChampionStats[]
   performance: PerformanceStats
   roleStats: RoleStats[]
