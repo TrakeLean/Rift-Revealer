@@ -1,9 +1,9 @@
-# Session Summary - Arena Placement Tracking
+# Session Summary - Arena Placement Tracking & Stats
 
 ## What Was Completed
 
 ### Arena Placement Tracking System
-Successfully implemented full Arena placement tracking (1-8) for League of Legends Arena matches.
+Successfully implemented full Arena placement tracking (1-8) and average placement statistics for League of Legends Arena matches.
 
 ### Changes Made:
 
@@ -50,10 +50,44 @@ Successfully implemented full Arena placement tracking (1-8) for League of Legen
 
 ✅ Arena placement data is captured from Riot API
 ✅ Database stores placement for all matches
-✅ Arena teams are grouped and sorted by placement
+✅ Arena teams are grouped and sorted by placement (1-8)
 ✅ Placement badges display with subtle, color-coded styling
 ✅ Badge positioned after game count in card header
+✅ **Average placement stats calculated for Arena matches**
+✅ **Player cards show "Avg: #X.X" instead of W-L for Arena**
+✅ **Mode badges show average placement (e.g., "Arena: #3.5")**
+✅ **Tooltips display placement averages for Arena**
 ✅ All changes committed and pushed to git
+
+## Session 2 Changes (Average Placement Stats)
+
+#### Database Layer Updates (`src/database/db.js`)
+- **Updated queries** to include `opponent_placement` and `user_placement` fields (lines 482, 489, 529, 536)
+- **Modified `calculateModeStats`** function (lines 673-721):
+  - Detects Arena matches by queue_id === 1700
+  - For Arena: calculates avgPlacement from opponent placements
+  - For Arena: sets wins/losses/winRate to null
+  - For Arena: recent form shows "#1", "#2" instead of "W"/"L"
+  - For non-Arena: uses traditional win/loss stats
+
+#### TypeScript Types (`src/renderer/types/index.ts`)
+- **Updated `SplitStats` interface** (lines 120-131):
+  - Changed `wins`, `losses`, `winRate` to nullable (`number | null`)
+  - Added `avgPlacement?: number | null` for Arena stats
+  - Changed `recentForm` type to include strings for placement numbers
+
+#### UI Components
+
+**PlayerChip** (`src/renderer/components/PlayerChip.tsx`, lines 510-554):
+- Displays "Avg: #X.X" for Arena matches (teammate/opponent stats)
+- Falls back to W-L record for non-Arena modes
+- Color-coded based on threat level / ally quality
+
+**ModeStatsRow** (`src/renderer/components/ModeStatsRow.tsx`, lines 66-148):
+- Badge displays average placement for Arena (e.g., "Arena: #3.5")
+- Badge displays win rate for non-Arena modes (e.g., "Normal: 65%")
+- Tooltip shows placement averages with "Avg: #X.X" format
+- Calculates combined average placement across ally/enemy games
 
 ## For Next Session
 
@@ -77,10 +111,10 @@ Successfully implemented full Arena placement tracking (1-8) for League of Legen
 - `src/renderer/pages/LobbyAnalysis.tsx` - Roster display with Arena grouping (line 273)
 - `src/renderer/types/index.ts` - TypeScript interfaces (line 66 for placement field)
 
-### Git Commit:
+### Git Commits:
 ```
-commit 0b68bda
-feat: add Arena placement tracking with integrated UI display
+commit 0b68bda - Arena placement tracking with integrated UI display
+commit 5b0423e - Average placement stats for Arena mode
 ```
 
 ## Notes:

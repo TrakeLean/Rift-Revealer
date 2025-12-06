@@ -557,7 +557,8 @@ export function PlayerChip({
           )}
 
           {/* Mode Stats Badges with Tags and Champion */}
-          {encounterCount > 0 ? (
+          {/* Show mode badges for all cards (including user's own card) */}
+          {(encounterCount > 0 || byMode) && (
             <ModeStatsRow byMode={byMode}>
                 {/* Tags */}
                 {playerTags.length > 0 && (
@@ -604,52 +605,6 @@ export function PlayerChip({
                   ) : null
                 })()}
               </ModeStatsRow>
-          ) : null}
-
-          {/* For user card (encounterCount === 0), show champion name and tags together in same row */}
-          {encounterCount === 0 && (playerTags.length > 0 || championName || lastSeen?.champion) && (
-            <div className="flex flex-wrap gap-2 items-center min-h-[30px]">
-              {/* Tags first (left side) */}
-              {playerTags.map((tag, idx) => (
-                <div key={idx} className="relative group">
-                  <TagPill
-                    label={
-                      tag.tag_type === 'toxic' ? 'Toxic' :
-                      tag.tag_type === 'weak' ? 'Weak' :
-                      tag.tag_type === 'friendly' ? 'Friendly' :
-                      tag.tag_type === 'notable' ? 'Notable' :
-                      'Duo'
-                    }
-                    variant={
-                      tag.tag_type === 'toxic' ? 'toxic' :
-                      tag.tag_type === 'weak' ? 'warning' :
-                      tag.tag_type === 'friendly' ? 'positive' :
-                      tag.tag_type === 'notable' ? 'notable' :
-                      'info'
-                    }
-                    className="cursor-default"
-                  />
-                  {tag.note && (
-                    <div
-                      className="pointer-events-none absolute left-0 top-full mt-1 inline-block rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-wrap break-words z-50"
-                      style={{ width: 'max-content', maxWidth: '18rem' }}
-                    >
-                      {tag.note}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Champion name last (right side) */}
-              {(() => {
-                const champToShow = lastSeen?.champion || championName
-                return champToShow ? (
-                  <div className="flex items-center gap-1.5 text-xs ml-auto">
-                    <span className="font-medium text-foreground/80">{formatChampionName(champToShow)}</span>
-                  </div>
-                ) : null
-              })()}
-            </div>
           )}
         </div>
       </CardContent>
