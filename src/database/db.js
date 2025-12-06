@@ -479,12 +479,14 @@ class DatabaseManager {
           opponent.assists as opponent_assists,
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
+          opponent.placement as opponent_placement,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
           user.assists as user_assists,
           user.win as user_win,
-          user.team_id as user_team
+          user.team_id as user_team,
+          user.placement as user_placement
         FROM matches m
         INNER JOIN match_participants user ON m.match_id = user.match_id AND user.puuid = ?
         INNER JOIN match_participants opponent ON m.match_id = opponent.match_id
@@ -524,12 +526,14 @@ class DatabaseManager {
           opponent.assists as opponent_assists,
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
+          opponent.placement as opponent_placement,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
           user.assists as user_assists,
           user.win as user_win,
-          user.team_id as user_team
+          user.team_id as user_team,
+          user.placement as user_placement
         FROM matches m
         INNER JOIN match_participants user ON m.match_id = user.match_id AND user.puuid = ?
         INNER JOIN match_participants opponent ON m.match_id = opponent.match_id
@@ -673,12 +677,41 @@ class DatabaseManager {
 
       if (relevantGames.length === 0) return null;
 
+      // Check if this is Arena (queue 1700)
+      const isArena = relevantGames.length > 0 && relevantGames[0].queue_id === 1700;
+
+      if (isArena) {
+        // For Arena: calculate average placement instead of win/loss
+        const placements = relevantGames
+          .map(g => g.opponent_placement)
+          .filter(p => p !== null && p !== undefined);
+
+        const avgPlacement = placements.length > 0
+          ? (placements.reduce((sum, p) => sum + p, 0) / placements.length).toFixed(1)
+          : null;
+
+        return {
+          games: relevantGames.length,
+          wins: null, // Not applicable for Arena
+          losses: null, // Not applicable for Arena
+          winRate: null, // Not applicable for Arena
+          avgPlacement: parseFloat(avgPlacement),
+          lastPlayed: new Date(relevantGames[0].game_creation),
+          recentForm: relevantGames.slice(0, 5).map(g => `#${g.opponent_placement}`), // Show placements instead of W/L
+          topChampions: getTopChampions(relevantGames),
+          performance: calculatePerformance(relevantGames),
+          roleStats: getRoleStats(relevantGames)
+        };
+      }
+
+      // For non-Arena modes: use win/loss logic
       const wins = relevantGames.filter(g => g.user_win === 1).length;
       return {
         games: relevantGames.length,
         wins,
         losses: relevantGames.length - wins,
         winRate: Math.round((wins / relevantGames.length) * 100),
+        avgPlacement: null, // Not applicable for non-Arena
         lastPlayed: new Date(relevantGames[0].game_creation),
         recentForm: getRecentForm(relevantGames),
         topChampions: getTopChampions(relevantGames),

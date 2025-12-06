@@ -67,8 +67,26 @@ export function ModeStatsRow({ byMode, children, selectedMode = 'all', onModeSel
         const config = MODE_CONFIG[mode as GameMode]
         const Icon = config.icon
         const totalModeGames = (stats.asEnemy?.games || 0) + (stats.asAlly?.games || 0)
-        const totalWins = (stats.asEnemy?.wins || 0) + (stats.asAlly?.wins || 0)
-        const winRate = totalModeGames > 0 ? Math.round((totalWins / totalModeGames) * 100) : 0
+
+        // Check if this is Arena mode (has avgPlacement)
+        const isArena = stats.asEnemy?.avgPlacement !== null && stats.asEnemy?.avgPlacement !== undefined ||
+                        stats.asAlly?.avgPlacement !== null && stats.asAlly?.avgPlacement !== undefined
+
+        // For Arena: show average placement, for others: show win rate
+        const displayValue = isArena
+          ? (() => {
+              const placements = [stats.asEnemy?.avgPlacement, stats.asAlly?.avgPlacement].filter(p => p !== null && p !== undefined)
+              const avgPlacement = placements.length > 0
+                ? (placements.reduce((sum, p) => sum + (p || 0), 0) / placements.length).toFixed(1)
+                : '0'
+              return `#${avgPlacement}`
+            })()
+          : (() => {
+              const totalWins = (stats.asEnemy?.wins || 0) + (stats.asAlly?.wins || 0)
+              const winRate = totalModeGames > 0 ? Math.round((totalWins / totalModeGames) * 100) : 0
+              return `${winRate}%`
+            })()
+
         const isSelected = selectedMode === mode
 
         return (
@@ -82,7 +100,7 @@ export function ModeStatsRow({ byMode, children, selectedMode = 'all', onModeSel
               onClick={(e) => handleModeClick(mode as GameMode, e)}
             >
               <Icon className={cn('h-3 w-3', config.color)} />
-              <span className="text-xs font-medium">{config.label}: {winRate}%</span>
+              <span className="text-xs font-medium">{config.label}: {displayValue}</span>
             </Badge>
 
             {/* Tooltip */}
@@ -97,17 +115,29 @@ export function ModeStatsRow({ byMode, children, selectedMode = 'all', onModeSel
                   {stats.asAlly && stats.asAlly.games > 0 && (
                     <div className="flex justify-between">
                       <span>As Teammate:</span>
-                      <span className="font-medium text-emerald-400">
-                        {stats.asAlly.wins}-{stats.asAlly.losses} ({stats.asAlly.winRate}%)
-                      </span>
+                      {stats.asAlly.avgPlacement !== null && stats.asAlly.avgPlacement !== undefined ? (
+                        <span className="font-medium text-emerald-400">
+                          Avg: #{stats.asAlly.avgPlacement}
+                        </span>
+                      ) : (
+                        <span className="font-medium text-emerald-400">
+                          {stats.asAlly.wins}-{stats.asAlly.losses} ({stats.asAlly.winRate}%)
+                        </span>
+                      )}
                     </div>
                   )}
                   {stats.asEnemy && stats.asEnemy.games > 0 && (
                     <div className="flex justify-between">
                       <span>As Opponent:</span>
-                      <span className="font-medium text-red-400">
-                        {stats.asEnemy.wins}-{stats.asEnemy.losses} ({stats.asEnemy.winRate}%)
-                      </span>
+                      {stats.asEnemy.avgPlacement !== null && stats.asEnemy.avgPlacement !== undefined ? (
+                        <span className="font-medium text-red-400">
+                          Avg: #{stats.asEnemy.avgPlacement}
+                        </span>
+                      ) : (
+                        <span className="font-medium text-red-400">
+                          {stats.asEnemy.wins}-{stats.asEnemy.losses} ({stats.asEnemy.winRate}%)
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
