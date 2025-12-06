@@ -22,6 +22,7 @@ export interface MatchData {
   kda: KDA
   timestamp: Date
   isAlly: boolean // true if teammate, false if enemy
+  gameMode?: GameMode // Which mode this match was played in
 }
 
 // Player History
@@ -62,6 +63,7 @@ export interface RosterPlayer {
   teamPosition?: string
   profileIconId?: number | null
   win?: boolean
+  placement?: number | null
   encounterCount?: number
   wins?: number
   losses?: number
@@ -141,7 +143,7 @@ export interface ModeStats {
   asAlly: SplitStats | null
 }
 
-export type GameMode = 'Ranked' | 'Normal' | 'ARAM' | 'Arena' | 'Other'
+export type GameMode = 'Solo/Duo' | 'Flex' | 'Normal' | 'ARAM' | 'Arena' | 'Other'
 
 // Enhanced Analysis Result
 export interface AnalysisResult {
