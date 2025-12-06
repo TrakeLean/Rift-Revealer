@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { PlayerChip } from '@/components/PlayerChip'
 import { StatsPanel } from '@/components/StatsPanel'
 import { MatchCard } from '@/components/MatchCard'
+import { ModeFilter } from '@/components/ModeFilter'
 import { Activity, CheckCircle2, Clock, AlertCircle, Gamepad2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AnalysisResult, LastMatchRoster, RosterPlayer, PlayerRank } from '../types'
@@ -47,6 +48,55 @@ const QUEUE_NAMES: Record<number, string> = {
 
 const LIVE_STATES = ['champselect', 'champ select', 'championselect', 'inprogress', 'gamestart', 'reconnect']
 
+// Helper to get filtered stats based on selected modes
+const getFilteredStats = (
+  player: AnalysisResult | RosterPlayer,
+  selectedModes: Set<import('../types').GameMode>
+) => {
+  // If no modes selected, show all stats
+  if (selectedModes.size === 0) {
+    return { asEnemy: player.asEnemy, asAlly: player.asAlly }
+  }
+
+  // Combine stats from selected modes
+  let combinedAsEnemy: import('../types').SplitStats | undefined = undefined
+  let combinedAsAlly: import('../types').SplitStats | undefined = undefined
+
+  selectedModes.forEach(mode => {
+    const modeStats = player.byMode?.[mode]
+    if (!modeStats) return
+
+    if (modeStats.asEnemy) {
+      if (!combinedAsEnemy) {
+        combinedAsEnemy = { ...modeStats.asEnemy }
+      } else {
+        // Combine the stats
+        combinedAsEnemy.games += modeStats.asEnemy.games
+        combinedAsEnemy.wins += modeStats.asEnemy.wins
+        combinedAsEnemy.losses += modeStats.asEnemy.losses
+        combinedAsEnemy.winRate = Math.round((combinedAsEnemy.wins / combinedAsEnemy.games) * 100)
+      }
+    }
+
+    if (modeStats.asAlly) {
+      if (!combinedAsAlly) {
+        combinedAsAlly = { ...modeStats.asAlly }
+      } else {
+        // Combine the stats
+        combinedAsAlly.games += modeStats.asAlly.games
+        combinedAsAlly.wins += modeStats.asAlly.wins
+        combinedAsAlly.losses += modeStats.asAlly.losses
+        combinedAsAlly.winRate = Math.round((combinedAsAlly.wins / combinedAsAlly.games) * 100)
+      }
+    }
+  })
+
+  return {
+    asEnemy: combinedAsEnemy,
+    asAlly: combinedAsAlly
+  }
+}
+
 // Persist last lobby analysis/status across tab switches
 let cachedDetectedPlayers: AnalysisResult[] = []
 let cachedStatus: { message: string; type: 'success' | 'error' | 'info' | 'warning' } | null = null
@@ -62,6 +112,7 @@ export function LobbyAnalysis() {
   const [detectedPlayers, setDetectedPlayers] = useState<AnalysisResult[]>([])
   const [status, setStatus] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'warning' } | null>(null)
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null)
+  const [selectedModes, setSelectedModes] = useState<Set<import('../types').GameMode>>(new Set())
   const [gameflowStatus, setGameflowStatus] = useState<{
     state: string
     message: string
@@ -83,9 +134,13 @@ export function LobbyAnalysis() {
   const loadLastRoster = useCallback(async () => {
     if (!window.api?.getLastMatchRoster || !window.api?.getUserConfig) {
       console.log('[Rank] Missing API methods')
+      setRosterLoading(false)
+      setRosterError('API methods not available')
       return
     }
 
+    // Clear old roster data before loading new data to prevent flash
+    setLastRoster(null)
     setRosterLoading(true)
     try {
       const res = await window.api.getLastMatchRoster()
@@ -204,8 +259,52 @@ export function LobbyAnalysis() {
   }
 
   const buildRosterRows = (players: RosterPlayer[]) => {
+    // Deduplicate by PUUID (keep first occurrence)
+    const seenPuuids = new Set<string>()
+    const uniquePlayers = players.filter((p) => {
+      if (seenPuuids.has(p.puuid)) {
+        console.warn(`Duplicate player detected in roster: ${formatRiotId(p.username, p.tagLine)} (${p.puuid})`)
+        return false
+      }
+      seenPuuids.add(p.puuid)
+      return true
+    })
+
+    // Check if this is an Arena match (all players have placement data)
+    const isArenaMatch = uniquePlayers.length > 0 && uniquePlayers.every(p => p.placement !== null && p.placement !== undefined)
+
+    if (isArenaMatch) {
+      // For Arena: Group by placement (each placement has 2 teammates)
+      // Sort by placement 1-8
+      const byPlacement: Record<number, RosterPlayer[]> = {}
+      uniquePlayers.forEach((p) => {
+        const placement = p.placement!
+        if (!byPlacement[placement]) byPlacement[placement] = []
+        byPlacement[placement].push(p)
+      })
+
+      // Sort placements 1-8
+      const placements = Object.keys(byPlacement).map(Number).sort((a, b) => a - b)
+
+      const rows: Array<{ left?: RosterPlayer; right?: RosterPlayer }> = []
+      placements.forEach(placement => {
+        const team = byPlacement[placement] || []
+        // Each Arena team should have 2 players
+        rows.push({
+          left: team[0],
+          right: team[1]
+        })
+      })
+
+      return {
+        rows,
+        leftLabel: 'Teammate 1',
+        rightLabel: 'Teammate 2'
+      }
+    }
+
     const byTeam: Record<number, RosterPlayer[]> = {}
-    players.forEach((p) => {
+    uniquePlayers.forEach((p) => {
       const teamKey = typeof p.teamId === 'number' ? p.teamId : 0
       if (!byTeam[teamKey]) byTeam[teamKey] = []
       byTeam[teamKey].push(p)
@@ -246,8 +345,8 @@ export function LobbyAnalysis() {
       }
     }
 
-    // Fallback for multi-team / role-less modes (e.g., Arena, ARAM)
-    const sorted = [...players].sort((a, b) => {
+    // Fallback for multi-team / role-less modes (e.g., ARAM)
+    const sorted = [...uniquePlayers].sort((a, b) => {
       if ((a.teamId ?? 0) !== (b.teamId ?? 0)) return (a.teamId ?? 0) - (b.teamId ?? 0)
       const roleDiff = getRoleOrder(a) - getRoleOrder(b)
       if (roleDiff !== 0) return roleDiff
@@ -348,9 +447,16 @@ export function LobbyAnalysis() {
         if (normalized !== 'endofgame' && normalized !== 'preendofgame' && normalized !== 'waitingforstats') {
           loadLastRoster()
         } else {
-          // Show loading state while waiting for auto-import
+          // Clear old roster and show loading state while waiting for auto-import
+          setLastRoster(null)
           setRosterLoading(true)
           setRosterError(null)
+
+          // Fallback: Load roster after 10 seconds if auto-import doesn't fire
+          setTimeout(() => {
+            console.log('[Roster] Auto-import timeout - loading roster anyway')
+            loadLastRoster()
+          }, 10000)
         }
       } else if (isLiveNow && !prevIsLiveRef.current) {
         setLastRoster(null)
@@ -621,6 +727,10 @@ export function LobbyAnalysis() {
     const isSelected = expandedPlayer === playerKey
     const playerRank = playerRanks[player.puuid] ?? null
 
+    // Check if this is an Arena match (queue ID 1700)
+    const isArenaMatch = lastRoster?.queueId === 1700
+    const hasPlacement = player.placement !== null && player.placement !== undefined
+
     return (
       <div key={key} className="space-y-2 h-full">
         <PlayerChip
@@ -646,6 +756,7 @@ export function LobbyAnalysis() {
           isExpanded={isSelected}
           className={cn("h-full", isSelected && "ring-1 ring-primary/60")}
           rank={playerRank}
+          placement={player.placement ?? undefined}
         />
       </div>
     )
@@ -672,12 +783,17 @@ export function LobbyAnalysis() {
           {/* Player Analysis */}
           <Card>
             <CardHeader>
-              <CardTitle>Players You've Met</CardTitle>
-              <CardDescription>
-                {detectedPlayers.length > 0
-                  ? 'Your history with players in this lobby'
-                  : 'Players you\'ve encountered before will appear here'}
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Players You've Met</CardTitle>
+                  <CardDescription>
+                    {detectedPlayers.length > 0
+                      ? 'Your history with players in this lobby'
+                      : 'Players you\'ve encountered before will appear here'}
+                  </CardDescription>
+                </div>
+                <ModeFilter selectedModes={selectedModes} onModesChange={setSelectedModes} players={detectedPlayers} />
+              </div>
             </CardHeader>
             <CardContent>
               {detectedPlayers.length > 0 ? (
@@ -686,6 +802,7 @@ export function LobbyAnalysis() {
                     const hasDetails = Boolean(player.asEnemy || player.asAlly || (player.games && player.games.length > 0));
                     const playerKey = formatRiotId(player.username, player.tagLine);
                     const isSelected = expandedPlayer === playerKey;
+                    const filteredStats = getFilteredStats(player, selectedModes);
                     return (
                       <div key={playerKey} className="space-y-2">
                         <PlayerChip
@@ -714,36 +831,41 @@ export function LobbyAnalysis() {
 
                         {isSelected && (
                           <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
-                            {(player.asEnemy || player.asAlly) && (
+                            {(filteredStats.asEnemy || filteredStats.asAlly) && (
                               <StatsPanel
-                                asEnemy={player.asEnemy}
-                                asAlly={player.asAlly}
+                                asEnemy={filteredStats.asEnemy}
+                                asAlly={filteredStats.asAlly}
                               />
                             )}
-                            {player.games && player.games.length > 0 && (
-                              <div className="space-y-2">
-                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                                  Recent Games
-                                </p>
+                            {player.games && player.games.length > 0 && (() => {
+                              const filteredGames = selectedModes.size === 0
+                                ? player.games
+                                : player.games.filter(g => g.gameMode && selectedModes.has(g.gameMode));
+                              return filteredGames.length > 0 && (
                                 <div className="space-y-2">
-                                  {player.games.slice(0, 5).map((match, idx2) => (
-                                    <MatchCard
-                                      key={idx2}
-                                      gameId={match.gameId}
-                                      champion={match.champion}
-                                      outcome={match.outcome}
-                                      kda={match.kda}
-                                      timestamp={new Date(match.timestamp)}
-                                    />
-                                  ))}
-                                  {player.games.length > 5 && (
-                                    <p className="text-xs text-muted-foreground text-center py-2">
-                                      + {player.games.length - 5} more games
-                                    </p>
-                                  )}
+                                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                                    Recent Games
+                                  </p>
+                                  <div className="space-y-2">
+                                    {filteredGames.slice(0, 5).map((match, idx2) => (
+                                      <MatchCard
+                                        key={idx2}
+                                        gameId={match.gameId}
+                                        champion={match.champion}
+                                        outcome={match.outcome}
+                                        kda={match.kda}
+                                        timestamp={new Date(match.timestamp)}
+                                      />
+                                    ))}
+                                    {filteredGames.length > 5 && (
+                                      <p className="text-xs text-muted-foreground text-center py-2">
+                                        + {filteredGames.length - 5} more games
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                           </div>
                         )}
                       </div>
@@ -767,10 +889,15 @@ export function LobbyAnalysis() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Last Match Roster</CardTitle>
-            <CardDescription>
-              Review and tag players from your most recent match.
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Last Match Roster</CardTitle>
+                <CardDescription>
+                  Review and tag players from your most recent match.
+                </CardDescription>
+              </div>
+              <ModeFilter selectedModes={selectedModes} onModesChange={setSelectedModes} players={lastRoster?.players || []} />
+            </div>
           </CardHeader>
           <CardContent>
             {rosterLoading ? (
@@ -784,6 +911,9 @@ export function LobbyAnalysis() {
                     const right = rosterLayout.rows[idx]?.right
                     const expandedData =
                       expandedPlayer && [left, right].find(p => p && formatRiotId(p.username, p.tagLine) === expandedPlayer)
+                    const expandedFilteredStats = expandedData
+                      ? getFilteredStats(expandedData, selectedModes)
+                      : null
 
                     return (
                       <div key={`row-${idx}`} className="space-y-2">
@@ -792,38 +922,43 @@ export function LobbyAnalysis() {
                           {renderRosterCell(right, rosterLayout.rightLabel, `right-${idx}`)}
                         </div>
 
-                        {expandedData && (
+                        {expandedData && expandedFilteredStats && (
                           <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
-                            {(expandedData.asEnemy || expandedData.asAlly) && (
+                            {(expandedFilteredStats.asEnemy || expandedFilteredStats.asAlly) && (
                               <StatsPanel
-                                asEnemy={expandedData.asEnemy || undefined}
-                                asAlly={expandedData.asAlly || undefined}
+                                asEnemy={expandedFilteredStats.asEnemy || undefined}
+                                asAlly={expandedFilteredStats.asAlly || undefined}
                               />
                             )}
-                            {expandedData.games && expandedData.games.length > 0 && (
-                              <div className="space-y-2">
-                                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                                  Recent Games
-                                </p>
+                            {expandedData.games && expandedData.games.length > 0 && (() => {
+                              const filteredGames = selectedModes.size === 0
+                                ? expandedData.games
+                                : expandedData.games.filter(g => g.gameMode && selectedModes.has(g.gameMode));
+                              return filteredGames.length > 0 && (
                                 <div className="space-y-2">
-                                  {expandedData.games.slice(0, 5).map((match, midx) => (
-                                    <MatchCard
-                                      key={midx}
-                                      gameId={match.gameId}
-                                      champion={match.champion}
-                                      outcome={match.outcome}
-                                      kda={match.kda}
-                                      timestamp={new Date(match.timestamp)}
-                                    />
-                                  ))}
-                                  {expandedData.games.length > 5 && (
-                                    <p className="text-xs text-muted-foreground text-center py-2">
-                                      + {expandedData.games.length - 5} more games
-                                    </p>
-                                  )}
+                                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                                    Recent Games
+                                  </p>
+                                  <div className="space-y-2">
+                                    {filteredGames.slice(0, 5).map((match, midx) => (
+                                      <MatchCard
+                                        key={midx}
+                                        gameId={match.gameId}
+                                        champion={match.champion}
+                                        outcome={match.outcome}
+                                        kda={match.kda}
+                                        timestamp={new Date(match.timestamp)}
+                                      />
+                                    ))}
+                                    {filteredGames.length > 5 && (
+                                      <p className="text-xs text-muted-foreground text-center py-2">
+                                        + {filteredGames.length - 5} more games
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              );
+                            })()}
                           </div>
                         )}
                       </div>

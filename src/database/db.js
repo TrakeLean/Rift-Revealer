@@ -190,6 +190,20 @@ class DatabaseManager {
       console.log('  Migration complete: notification settings columns added');
     }
 
+    // Add placement column to match_participants for Arena mode
+    const hasPlacement = this.db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('match_participants')
+      WHERE name='placement'
+    `).get();
+
+    if (hasPlacement.count === 0) {
+      console.log('Running migration: Adding placement column to match_participants');
+      this.db.exec(`
+        ALTER TABLE match_participants ADD COLUMN placement INTEGER;
+      `);
+      console.log('  Migration complete: placement column added for Arena tracking');
+    }
+
     console.log('Database migrations completed');
   }
 
@@ -305,8 +319,8 @@ class DatabaseManager {
     const participantStmt = this.db.prepare(`
       INSERT INTO match_participants (
         match_id, puuid, username, tag_line, champion_name, champion_id, skin_id, team_id,
-        kills, deaths, assists, win, lane
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        kills, deaths, assists, win, lane, placement
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     // Helper: normalize role to canonical slots
@@ -396,6 +410,9 @@ class DatabaseManager {
 
     // Persist participants after role inference
     for (const p of processedParticipants) {
+      // For Arena matches (queue 1700), capture subteamPlacement
+      const placement = p.participant.subteamPlacement ?? null;
+
       participantStmt.run(
         matchData.metadata.matchId,
         p.participant.puuid,
@@ -409,20 +426,23 @@ class DatabaseManager {
         p.participant.deaths,
         p.participant.assists,
         p.participant.win ? 1 : 0,
-        p.lane
+        p.lane,
+        placement
       );
     }
   }
 
   // Helper: Categorize queue IDs into game modes
   categorizeQueue(queueId) {
-    const ranked = [420, 440]; // Ranked Solo/Duo, Ranked Flex
+    const soloDuo = [420]; // Ranked Solo/Duo
+    const flex = [440]; // Ranked Flex
     const normal = [400, 430]; // Normal Draft, Normal Blind
     const aram = [450, 100, 2400]; // ARAM (includes ARAM Mayhem)
     const arena = [1700]; // Arena
     const other = [0, 700, 720, 830, 840, 850, 900, 1020, 1300, 1400, 1900]; // Custom, Clash, URF, etc.
 
-    if (ranked.includes(queueId)) return 'Ranked';
+    if (soloDuo.includes(queueId)) return 'Solo/Duo';
+    if (flex.includes(queueId)) return 'Flex';
     if (normal.includes(queueId)) return 'Normal';
     if (aram.includes(queueId)) return 'ARAM';
     if (arena.includes(queueId)) return 'Arena';
@@ -794,6 +814,7 @@ class DatabaseManager {
         mp.team_id,
         mp.lane,
         mp.win,
+        mp.placement,
         p.profile_icon_id as profile_icon_id
       FROM match_participants mp
       LEFT JOIN players p ON p.puuid = mp.puuid
@@ -823,7 +844,8 @@ class DatabaseManager {
         teamPosition: p.lane,
         profileIconId: p.profile_icon_id,
         win: p.win === 1,
-        skinId: p.skin_id ?? null
+        skinId: p.skin_id ?? null,
+        placement: p.placement ?? null
       });
     }
 
@@ -873,7 +895,8 @@ class DatabaseManager {
                 assists: g.opponent_assists
               },
               timestamp: new Date(g.game_creation),
-              isAlly: g.user_team === g.opponent_team
+              isAlly: g.user_team === g.opponent_team,
+              gameMode: g.queue_id ? this.categorizeQueue(g.queue_id) : null
             }));
           } else {
             console.log(`[Last Match Roster] No history found for ${formatRiotId(p.username, p.tagLine)} (PUUID: ${p.puuid})`);

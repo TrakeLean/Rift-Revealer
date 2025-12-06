@@ -2,9 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { TagPill } from './TagPill'
-import { ModeStatsRow } from './ModeStatsRow'
 import { PlayerTagMenu } from './PlayerTagMenu'
 import { RankBadge } from './RankBadge'
+import { ModeStatsRow } from './ModeStatsRow'
 import { cn } from '@/lib/utils'
 import { User, ChevronDown, ChevronUp, Tag } from 'lucide-react'
 import type { SplitStats, GameMode, ModeStats } from '../types'
@@ -67,6 +67,7 @@ interface PlayerChipProps {
   isExpanded?: boolean
   rank?: PlayerRank | null
   ddragonVersion?: string // Optional prop from parent to avoid re-fetching
+  placement?: number | null // Arena placement (1-8)
 }
 
 export function PlayerChip({
@@ -93,6 +94,7 @@ export function PlayerChip({
   isExpanded = false,
   rank,
   ddragonVersion: ddragonVersionProp,
+  placement,
 }: PlayerChipProps) {
   const summonerName = `${username}#${tagLine}`
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
@@ -413,6 +415,7 @@ export function PlayerChip({
     }[quality]
   }
 
+
   const backgroundStyle = backgroundSrc
     ? {
         backgroundImage: `url(${backgroundSrc})`,
@@ -471,6 +474,23 @@ export function PlayerChip({
                   {encounterCount} {encounterCount === 1 ? 'game' : 'games'}
                 </span>
               )}
+              {/* Arena placement badge */}
+              {placement !== null && placement !== undefined && (
+                <div className={cn(
+                  "px-2 py-0.5 rounded text-xs font-semibold",
+                  placement === 1
+                    ? "bg-yellow-500/20 text-yellow-300 border border-yellow-500/40"
+                    : placement === 2
+                    ? "bg-slate-400/20 text-slate-300 border border-slate-400/40"
+                    : placement === 3
+                    ? "bg-amber-600/20 text-amber-300 border border-amber-600/40"
+                    : placement <= 4
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                    : "bg-red-500/20 text-red-300 border border-red-500/40"
+                )}>
+                  #{placement}
+                </div>
+              )}
               {/* DISABLED: Rank display requires production API key - see DEVELOPMENT.md */}
               {/* {rank !== undefined && <RankBadge rank={rank} size="sm" />} */}
               {isClickable && (
@@ -516,58 +536,55 @@ export function PlayerChip({
             </div>
           )}
 
-          {/* Mode-specific stats and meta row combined */}
+          {/* Mode Stats Badges with Tags and Champion */}
           {encounterCount > 0 ? (
             <ModeStatsRow byMode={byMode}>
-              {/* For non-user cards (encounterCount > 0), show tags inline */}
-              {playerTags.length > 0 && (
-                <div className="flex gap-1.5 flex-wrap">
-                  {playerTags.map((tag, idx) => (
-                    <div key={idx} className="relative group">
-                      <TagPill
-                        label={
-                          tag.tag_type === 'toxic' ? 'Toxic' :
-                          tag.tag_type === 'weak' ? 'Weak' :
-                          tag.tag_type === 'friendly' ? 'Friendly' :
-                          tag.tag_type === 'notable' ? 'Notable' :
-                          'Duo'
-                        }
-                        variant={
-                          tag.tag_type === 'toxic' ? 'toxic' :
-                          tag.tag_type === 'weak' ? 'warning' :
-                          tag.tag_type === 'friendly' ? 'positive' :
-                          tag.tag_type === 'notable' ? 'notable' :
-                          'info'
-                        }
-                        className="cursor-default"
-                      />
-                      {tag.note && (
-                        <div
-                          className="pointer-events-none absolute left-0 top-full mt-1 inline-block rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-wrap break-words z-50"
-                          style={{ width: 'max-content', maxWidth: '18rem' }}
-                        >
-                          {tag.note}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Show champion name for non-user cards */}
-              {(() => {
-                const champToShow = lastSeen?.champion || championName
-                return champToShow ? (
-                  <div className="flex items-center gap-1.5 text-xs ml-auto">
-                    <span className="font-medium text-foreground/80">{formatChampionName(champToShow)}</span>
+                {/* Tags */}
+                {playerTags.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {playerTags.map((tag, idx) => (
+                      <div key={idx} className="relative group">
+                        <TagPill
+                          label={
+                            tag.tag_type === 'toxic' ? 'Toxic' :
+                            tag.tag_type === 'weak' ? 'Weak' :
+                            tag.tag_type === 'friendly' ? 'Friendly' :
+                            tag.tag_type === 'notable' ? 'Notable' :
+                            'Duo'
+                          }
+                          variant={
+                            tag.tag_type === 'toxic' ? 'toxic' :
+                            tag.tag_type === 'weak' ? 'warning' :
+                            tag.tag_type === 'friendly' ? 'positive' :
+                            tag.tag_type === 'notable' ? 'notable' :
+                            'info'
+                          }
+                          className="cursor-default"
+                        />
+                        {tag.note && (
+                          <div
+                            className="pointer-events-none absolute left-0 top-full mt-1 inline-block rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-wrap break-words z-50"
+                            style={{ width: 'max-content', maxWidth: '18rem' }}
+                          >
+                            {tag.note}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ) : null
-              })()}
-            </ModeStatsRow>
-          ) : (
-            /* Empty placeholder to match stats section height */
-            <div className={sectionClass} />
-          )}
+                )}
+
+                {/* Show champion name for non-user cards */}
+                {(() => {
+                  const champToShow = lastSeen?.champion || championName
+                  return champToShow ? (
+                    <div className="flex items-center gap-1.5 text-xs ml-auto">
+                      <span className="font-medium text-foreground/80">{formatChampionName(champToShow)}</span>
+                    </div>
+                  ) : null
+                })()}
+              </ModeStatsRow>
+          ) : null}
 
           {/* For user card (encounterCount === 0), show champion name and tags together in same row */}
           {encounterCount === 0 && (playerTags.length > 0 || championName || lastSeen?.champion) && (
