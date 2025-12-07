@@ -291,13 +291,22 @@ class DatabaseManager {
   }
 
   saveMatch(matchData) {
+    const matchId = matchData.metadata.matchId;
+
+    // Skip if we've already imported this match
+    const existingMatch = this.db.prepare('SELECT 1 FROM matches WHERE match_id = ? LIMIT 1').get(matchId);
+    if (existingMatch) {
+      console.log(`[DB] Skipping already imported match ${matchId}`);
+      return false;
+    }
+
     const matchStmt = this.db.prepare(`
       INSERT OR IGNORE INTO matches (match_id, game_creation, game_duration, game_mode, queue_id, imported_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     matchStmt.run(
-      matchData.metadata.matchId,
+      matchId,
       matchData.info.gameCreation,
       matchData.info.gameDuration,
       matchData.info.gameMode,
@@ -305,7 +314,7 @@ class DatabaseManager {
       Date.now()
     );
 
-    console.log(`Saving match ${matchData.metadata.matchId} with ${matchData.info.participants.length} participants`);
+    console.log(`Saving match ${matchId} with ${matchData.info.participants.length} participants`);
 
     // Debug: Log first participant's name data
     if (matchData.info.participants.length > 0) {
@@ -414,7 +423,7 @@ class DatabaseManager {
       const placement = p.participant.subteamPlacement ?? null;
 
       participantStmt.run(
-        matchData.metadata.matchId,
+        matchId,
         p.participant.puuid,
         p.username,
         p.tagLine,
@@ -430,6 +439,8 @@ class DatabaseManager {
         placement
       );
     }
+
+    return true;
   }
 
   // Helper: Categorize queue IDs into game modes

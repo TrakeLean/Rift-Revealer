@@ -134,7 +134,7 @@ export function LobbyAnalysis() {
 
   const loadLastRoster = useCallback(async () => {
     if (!window.api?.getLastMatchRoster || !window.api?.getUserConfig) {
-      console.log('[LastRoster] ⚠️ API methods not available')
+      console.log('[LastRoster] Warning: API methods not available')
       setRosterLoading(false)
       setRosterError('API methods not available')
       return
@@ -146,7 +146,7 @@ export function LobbyAnalysis() {
       if (res.success && res.data) {
         // Only update if it's a different match to prevent unnecessary re-renders
         if (lastLoadedMatchId.current !== res.data.matchId) {
-          console.log(`[LastRoster] 🔄 Loading match ${res.data.matchId}`)
+          console.log(`[LastRoster] Loading match ${res.data.matchId}`)
           lastLoadedMatchId.current = res.data.matchId
           setLastRoster(res.data)
           setRosterError(null)
@@ -156,7 +156,7 @@ export function LobbyAnalysis() {
         setRosterError(res.error || 'Failed to load roster')
       }
     } catch (error: any) {
-      console.error('[LastRoster] ❌ Error loading roster:', error)
+      console.error('[LastRoster] Error loading roster:', error)
       setLastRoster(null)
       setRosterError(error.message || 'Failed to load roster')
     } finally {
@@ -407,9 +407,10 @@ export function LobbyAnalysis() {
       // Only clear when transitioning to non-live states (Lobby, None, ClientClosed)
       // Don't clear when entering live state - let lobby-update handle it
       if (!isLiveNow && prevIsLiveRef.current) {
-        console.log('[LobbyAnalysis] 🗑️ Clearing cached players - exited live state to:', normalized)
+        console.log(`[Cache] Clearing live lobby cache (exited to ${normalized || 'unknown'})`)
         setDetectedPlayers([])
         cachedDetectedPlayers = []
+        cachedStatus = null
       }
 
       if (!isLiveNow && prevIsLiveRef.current) {
@@ -429,7 +430,7 @@ export function LobbyAnalysis() {
           }, 10000)
         }
       } else if (isLiveNow && !prevIsLiveRef.current) {
-        setLastRoster(null)
+        // Keep last roster cached while entering live states to avoid flicker
         setRosterError(null)
       }
       prevIsLiveRef.current = isLiveNow
@@ -458,10 +459,11 @@ export function LobbyAnalysis() {
     const cleanupLobby = window.api.onLobbyUpdate((data) => {
       if (data.success && data.data) {
         const players = data.data.analysis || []
-        console.log(`[Frontend] ✅ Received ${players.length} players with history`)
+        console.log(`[Frontend] Received ${players.length} players with history`)
 
         setDetectedPlayers(players)
         cachedDetectedPlayers = players
+        console.log(`[Cache] Cached ${players.length} live lobby players`)
 
         if (data.data.analysis.length === 0) {
           const nextStatus = {
@@ -495,14 +497,19 @@ export function LobbyAnalysis() {
 
   useEffect(() => {
     // Restore last known lobby analysis/status when re-entering the tab
-    if (cachedDetectedPlayers.length > 0) {
+    const cachedState = (cachedGameflowStatus?.state || '').trim().toLowerCase()
+    const canRestoreLiveCache = cachedDetectedPlayers.length > 0 && isLiveState(cachedState)
+
+    if (canRestoreLiveCache) {
+      console.log(`[Cache] Restoring live lobby cache (${cachedDetectedPlayers.length} players)`)
       setDetectedPlayers(cachedDetectedPlayers)
+      if (cachedStatus) {
+        setStatus(cachedStatus)
+      }
     }
-    if (cachedStatus) {
-      setStatus(cachedStatus)
-    }
+
     loadLastRoster()
-  }, [loadLastRoster])
+  }, [loadLastRoster, isLiveState])
 
   const togglePlayerExpansion = (playerKey: string) => {
     setExpandedPlayer(expandedPlayer === playerKey ? null : playerKey)

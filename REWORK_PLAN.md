@@ -1,5 +1,18 @@
 # Lobby & Roster System Rework Plan
 
+## Phase Status
+- [x] Phase 1: Clean Up Last Match Roster
+- [x] Phase 2: Clean Up Players You've Met
+- [x] Phase 3: Smart Cache Management
+- [x] Phase 4: Structured Logging
+- [x] Phase 5: Documentation
+
+## Current Outcomes (Phases 1-4)
+- Single deduplication layer at the LCU connector; backend and frontend trust the source.
+- Live lobby cache stays warm while in ChampSelect/InProgress and clears only when exiting to Lobby/None/ClientClosed; skin cache clears on new lobbies and when the client closes.
+- Last match roster is cached and only refreshed when the match ID changes; it is not cleared when entering live states.
+- Logging follows `[Component] Action` (LCU, Backend, Frontend, Cache, LastRoster) with only meaningful lifecycle messages.
+
 ## Current Problems
 
 1. **Over-defensive deduplication** - Multiple layers filtering out valid players

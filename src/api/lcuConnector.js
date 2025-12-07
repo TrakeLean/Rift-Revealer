@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const { parseRiotId } = require('../database/db');
 
+// Track last logged live-game roster to avoid log spam during polling
+let lastLoggedLiveRosterHash = null;
+
 class LCUConnector {
   constructor() {
     this.credentials = null;
@@ -315,6 +318,18 @@ class LCUConnector {
           skinId,
           source: 'inGame'
         });
+      }
+
+      const liveRosterHash = JSON.stringify(
+        players
+          .map(p => p.puuid || p.summonerId || `${p.username || 'unknown'}#${p.tagLine || 'unknown'}`)
+          .sort()
+      );
+
+      // Only log when the roster actually changes to avoid spamming during polling
+      if (liveRosterHash !== lastLoggedLiveRosterHash) {
+        console.log(`[LCU] Retrieved ${players.length} unique players from live game`);
+        lastLoggedLiveRosterHash = liveRosterHash;
       }
 
       return players;

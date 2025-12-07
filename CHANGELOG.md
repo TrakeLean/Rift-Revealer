@@ -5,6 +5,14 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Players You've Met now relies on a single deduplication layer at the LCU connector; backend and frontend deduplication were removed.
+- Live lobby cache lifecycle clarified: live cache clears only when exiting live states, roster stays cached when entering live, and skin cache clears on new lobbies or when the client closes.
+- Structured logging aligned around lobby analysis with `[LCU]`, `[Backend]`, `[Frontend]`, `[Cache]`, and `[LastRoster]` lifecycle messages.
+- Auto-import now skips already imported matches to avoid duplicate UNIQUE constraint errors and log noise; import counts reflect only newly saved matches.
+
 ## [1.7.1] - 2025-12-05
 
 ### Changed
