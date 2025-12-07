@@ -80,7 +80,7 @@ Rift Revealer strictly adheres to Riot's API Terms of Service:
 - **Developer**: TrakeLean
 - **GitHub**: https://github.com/TrakeLean/Rift-Revealer
 - **Project License**: MIT
-- **Current Version**: v1.7.3
+- **Current Version**: v1.7.4
 
 ---
 
