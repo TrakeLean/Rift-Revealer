@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Live lobby cache lifecycle clarified: live cache clears only when exiting live states, roster stays cached when entering live, and skin cache clears on new lobbies or when the client closes.
 - Structured logging aligned around lobby analysis with `[LCU]`, `[Backend]`, `[Frontend]`, `[Cache]`, and `[LastRoster]` lifecycle messages.
 - Auto-import now skips already imported matches to avoid duplicate UNIQUE constraint errors and log noise; import counts reflect only newly saved matches.
+- End-of-game auto-import fetches the latest 3 matches and retries if nothing new imports, then retries again if the newest match ID did not change, reducing chances of serving a stale or already-imported match as the "last" game.
 
 ## [1.7.1] - 2025-12-05
 
