@@ -1145,11 +1145,32 @@ async function startGameflowMonitor() {
               if (config && config.riot_api_key) {
                 riotApi.setApiKey(config.riot_api_key);
 
+                // Track the last known match ID before import to detect stale pulls
+                const lastKnownMatch = db.db.prepare('SELECT match_id FROM matches ORDER BY game_creation DESC LIMIT 1').get();
+                const lastKnownMatchId = lastKnownMatch?.match_id || null;
+
                 // Wait 10 seconds for Riot to process the game
                 await new Promise(resolve => setTimeout(resolve, 10000));
 
                 console.log('Importing completed game...');
-                const result = await riotApi.importMatchHistory(config.puuid, config.region, 1);
+                // Pull a small window (latest 3) to avoid reusing an already-imported match
+                let result = await riotApi.importMatchHistory(config.puuid, config.region, 3);
+
+                // If nothing new imported (likely API delay), retry once after a short wait
+                if (result === 0) {
+                  console.log('No new matches imported. Retrying once after 10s...');
+                  await new Promise(resolve => setTimeout(resolve, 10000));
+                  result = await riotApi.importMatchHistory(config.puuid, config.region, 3);
+                }
+
+                // If the newest match ID did not change, perform one final fetch after a short delay
+                const latestAfterImport = db.db.prepare('SELECT match_id FROM matches ORDER BY game_creation DESC LIMIT 1').get();
+                const latestMatchId = latestAfterImport?.match_id || null;
+                if (lastKnownMatchId && latestMatchId === lastKnownMatchId) {
+                  console.log('Latest match ID unchanged after import. Retrying fetch after 5s...');
+                  await new Promise(resolve => setTimeout(resolve, 5000));
+                  result = await riotApi.importMatchHistory(config.puuid, config.region, 3);
+                }
 
                 if (mainWindow && !mainWindow.isDestroyed()) {
                   mainWindow.webContents.send('gameflow-status', {
