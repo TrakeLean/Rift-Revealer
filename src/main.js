@@ -1016,6 +1016,12 @@ async function startGameflowMonitor() {
           console.log('  [Skin Cache] Cleared for new lobby');
         }
 
+        // Also clear skin cache when leaving live states entirely (client closed/None)
+        if ((newState === 'None' || newState === 'ClientClosed') && db?.setLiveSkinSelections) {
+          db.setLiveSkinSelections([], true);
+          console.log(`  [Skin Cache] Cleared after state change to ${newState}`);
+        }
+
         // Send state update to renderer
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('gameflow-state-change', {

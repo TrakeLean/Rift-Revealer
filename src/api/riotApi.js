@@ -168,8 +168,12 @@ class RiotAPI {
         const matchId = matchIds[i];
         try {
           const matchData = await this.getMatchDetails(matchId, region);
-          this.db.saveMatch(matchData);
-          imported++;
+          const saved = this.db.saveMatch(matchData);
+          if (saved) {
+            imported++;
+          } else {
+            console.log(`[Import] Skipped already imported match ${matchId}`);
+          }
 
           // Send progress update
           if (progressCallback) {
