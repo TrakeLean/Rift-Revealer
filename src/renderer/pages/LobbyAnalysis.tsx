@@ -456,35 +456,12 @@ export function LobbyAnalysis() {
 
     // Listen for auto-monitor updates
     const cleanupLobby = window.api.onLobbyUpdate((data) => {
-      console.log('📥 [FRONTEND] Received lobby-update event:', data)
       if (data.success && data.data) {
-        console.log('  [FRONTEND] Setting detected players:', data.data.analysis.length)
-        const rawPlayers = data.data.analysis || []
+        const players = data.data.analysis || []
+        console.log(`[Frontend] ✅ Received ${players.length} players with history`)
 
-        console.log('  [FRONTEND] Raw player keys from backend:', rawPlayers.map(p => formatRiotId(p.username, p.tagLine)))
-
-        // Deduplicate by PUUID (or username#tagLine if no PUUID)
-        const seen = new Set()
-        const players = rawPlayers.filter((player, index) => {
-          const key = player.puuid || formatRiotId(player.username, player.tagLine)
-
-          if (seen.has(key)) {
-            console.warn(`⚠️  [FRONTEND] Duplicate player detected at index ${index} and removed:`, key)
-            return false
-          }
-
-          seen.add(key)
-          console.log(`  [FRONTEND] ✓ Keeping player ${index}: ${formatRiotId(player.username, player.tagLine)} (key: ${key})`)
-          return true
-        })
-
-        console.log('  [FRONTEND] After deduplication:', players.length, 'unique players')
-        console.log('  [FRONTEND] Deduplicated player keys:', players.map(p => formatRiotId(p.username, p.tagLine)))
-
-        console.log('  [FRONTEND] ✅ Setting state with', players.length, 'players')
         setDetectedPlayers(players)
         cachedDetectedPlayers = players
-        console.log('  [FRONTEND] ✅ cachedDetectedPlayers now has', cachedDetectedPlayers.length, 'players')
 
         if (data.data.analysis.length === 0) {
           const nextStatus = {

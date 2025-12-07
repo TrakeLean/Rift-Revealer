@@ -833,40 +833,10 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
     return;
   }
 
-  console.log(`[analyzeLobbyPlayers] Received ${lobbyPlayers.length} players from LCU`);
-  console.log('Lobby players:', lobbyPlayers.map(p => formatRiotId(p.username, p.tagLine)));
-  console.log('Your summoner name (from config):', formatRiotId(config.username, config.tag_line));
-
-  // Deduplicate lobbyPlayers by PUUID or username#tagLine
-  const seenPlayers = new Map();
-  const uniqueLobbyPlayers = [];
-
-  for (const player of lobbyPlayers) {
-    const key = player.puuid || formatRiotId(player.username, player.tagLine);
-    if (seenPlayers.has(key)) {
-      console.warn(`⚠️ [analyzeLobbyPlayers] Skipping duplicate: ${formatRiotId(player.username, player.tagLine)} (key: ${key})`);
-      continue;
-    }
-    seenPlayers.set(key, true);
-    uniqueLobbyPlayers.push(player);
-  }
-
-  if (lobbyPlayers.length !== uniqueLobbyPlayers.length) {
-    console.log(`[analyzeLobbyPlayers] Deduplicated ${lobbyPlayers.length} players down to ${uniqueLobbyPlayers.length}`);
-  }
-
-  // Use deduplicated array for the rest of the function
-  lobbyPlayers = uniqueLobbyPlayers;
+  console.log(`[Backend] Analyzing ${lobbyPlayers.length} players from LCU`);
 
   // Cache live skin selections so match imports can persist skin IDs
-  // Replace cache with current lobby data (cache was already cleared before calling this function)
   if (db?.setLiveSkinSelections) {
-    console.log('  [DEBUG] Lobby players data:', JSON.stringify(lobbyPlayers.map(p => ({
-      username: p.username,
-      championId: p.championId,
-      skinId: p.skinId,
-      hasSkinId: p.skinId !== undefined && p.skinId !== null
-    })), null, 2));
     db.setLiveSkinSelections(lobbyPlayers, false); // clearFirst=false since we cleared it earlier
   }
 
@@ -974,14 +944,7 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
       console.error(`  Players:`, playerKeys);
     }
 
-    console.log('  Analysis data sample:', JSON.stringify(analysis.map(p => ({
-      username: p.username,
-      tagLine: p.tagLine,
-      skinId: p.skinId,
-      championId: p.championId,
-      championName: p.championName,
-      hasTags: p.tags && p.tags.length > 0
-    })), null, 2));
+    console.log(`[Backend] Found ${analysis.length} players with history`);
     mainWindow.webContents.send('lobby-update', {
       success: true,
       data: { analysis }
