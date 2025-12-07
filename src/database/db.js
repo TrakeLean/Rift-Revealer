@@ -1029,12 +1029,23 @@ class DatabaseManager {
     `);
 
     const playersRaw = rosterStmt.all(match.match_id);
+    console.log(`[DB] Raw player data sample:`, playersRaw.slice(0, 2).map(p => ({
+      username: `${p.username}#${p.tag_line}`,
+      teamId: p.team_id,
+      win: p.win
+    })));
+
     const seen = new Map();
     const playersBase = [];
 
     for (const p of playersRaw) {
-      const key = `${p.puuid}-${p.team_id}`;
+      // Use PUUID if available, otherwise fallback to username+tagLine for deduplication
+      const key = p.puuid
+        ? `${p.puuid}-${p.team_id}`
+        : `${p.username}#${p.tag_line}-${p.team_id}`;
+
       if (seen.has(key)) {
+        console.log(`[DB] ⚠️ Skipping duplicate: ${p.username}#${p.tag_line} (key: ${key})`);
         continue; // dedupe duplicate participant rows for the same match
       }
       seen.set(key, true);
@@ -1138,6 +1149,8 @@ class DatabaseManager {
         tags
       };
     });
+
+    console.log(`[DB] ✅ Retrieved ${players.length} players for match ${match.match_id}`);
 
     return {
       matchId: match.match_id,

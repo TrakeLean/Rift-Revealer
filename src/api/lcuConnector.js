@@ -213,8 +213,22 @@ class LCUConnector {
     if (champSelect && (champSelect.myTeam || champSelect.theirTeam)) {
       const players = [];
       const allTeams = [...(champSelect.myTeam || []), ...(champSelect.theirTeam || [])];
+      const seenPlayers = new Set(); // Track unique players by summonerId or puuid
+
+      console.log(`[LCU] Processing ${allTeams.length} players from champ select (myTeam: ${champSelect.myTeam?.length || 0}, theirTeam: ${champSelect.theirTeam?.length || 0})`);
 
       for (const player of allTeams) {
+        // Create unique identifier for deduplication
+        const playerId = player.summonerId || player.puuid || player.cellId;
+        if (playerId && seenPlayers.has(playerId)) {
+          console.log(`[LCU] Skipping duplicate player with ID: ${playerId}`);
+          continue; // Skip duplicate
+        }
+        if (playerId) {
+          seenPlayers.add(playerId);
+          console.log(`[LCU] Adding player with ID: ${playerId}`);
+        }
+
         // Enrich selection map with champ select indices (works for both teams)
         if (isNumber(player.selectedSkinIndex) && player.puuid) {
           selectionMap.set(player.puuid, player.selectedSkinIndex);
@@ -251,6 +265,7 @@ class LCUConnector {
         });
       }
 
+      console.log(`[LCU] Returning ${players.length} unique players from champ select`);
       return players;
     }
 
@@ -259,6 +274,7 @@ class LCUConnector {
 
     if (gameSession && gameSession.gameData && gameSession.gameData.teamOne) {
       const players = [];
+      const seenPlayers = new Set(); // Track unique players by summonerId or puuid
 
       const allPlayers = [
         ...(gameSession.gameData.teamOne || []),
@@ -266,6 +282,15 @@ class LCUConnector {
       ];
 
       for (const player of allPlayers) {
+        // Create unique identifier for deduplication
+        const playerId = player.summonerId || player.puuid;
+        if (playerId && seenPlayers.has(playerId)) {
+          continue; // Skip duplicate
+        }
+        if (playerId) {
+          seenPlayers.add(playerId);
+        }
+
         // Capture any selectedSkinIndex from live game snapshot
         if (isNumber(player.selectedSkinIndex) && player.puuid) {
           selectionMap.set(player.puuid, player.selectedSkinIndex);

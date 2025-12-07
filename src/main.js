@@ -417,17 +417,16 @@ ipcMain.handle('get-last-match-roster', async () => {
   try {
     const roster = db.getMostRecentMatchRoster();
     if (!roster) {
-      console.log('[Last Roster] No recent matches found');
+      console.log('[LastRoster] ⚠️ No recent matches found');
       return {
         success: false,
         error: 'No recent matches found. Import matches from Settings to see your last game roster.'
       };
     }
-    console.log(`[Last Roster] Returning roster for match ${roster.matchId} with ${roster.players?.length || 0} players`);
-    console.log('[Last Roster] Player skin IDs:', roster.players?.map(p => `${p.username}: ${p.skinId}`).join(', '));
+    console.log(`[LastRoster] Sending ${roster.players?.length || 0} players from match ${roster.matchId}`);
     return { success: true, data: roster };
   } catch (error) {
-    console.error('Failed to get last match roster:', error);
+    console.error('[LastRoster] ❌ Error:', error);
     return { success: false, error: error.message };
   }
 });
@@ -834,8 +833,30 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
     return;
   }
 
+  console.log(`[analyzeLobbyPlayers] Received ${lobbyPlayers.length} players from LCU`);
   console.log('Lobby players:', lobbyPlayers.map(p => formatRiotId(p.username, p.tagLine)));
   console.log('Your summoner name (from config):', formatRiotId(config.username, config.tag_line));
+
+  // Deduplicate lobbyPlayers by PUUID or username#tagLine
+  const seenPlayers = new Map();
+  const uniqueLobbyPlayers = [];
+
+  for (const player of lobbyPlayers) {
+    const key = player.puuid || formatRiotId(player.username, player.tagLine);
+    if (seenPlayers.has(key)) {
+      console.warn(`⚠️ [analyzeLobbyPlayers] Skipping duplicate: ${formatRiotId(player.username, player.tagLine)} (key: ${key})`);
+      continue;
+    }
+    seenPlayers.set(key, true);
+    uniqueLobbyPlayers.push(player);
+  }
+
+  if (lobbyPlayers.length !== uniqueLobbyPlayers.length) {
+    console.log(`[analyzeLobbyPlayers] Deduplicated ${lobbyPlayers.length} players down to ${uniqueLobbyPlayers.length}`);
+  }
+
+  // Use deduplicated array for the rest of the function
+  lobbyPlayers = uniqueLobbyPlayers;
 
   // Cache live skin selections so match imports can persist skin IDs
   // Replace cache with current lobby data (cache was already cleared before calling this function)
@@ -943,6 +964,16 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
   // Send update to renderer
   if (mainWindow && !mainWindow.isDestroyed()) {
     console.log('📤 Sending lobby-update event to renderer with', analysis.length, 'players');
+
+    // Check for duplicates before sending
+    const playerKeys = analysis.map(p => formatRiotId(p.username, p.tagLine));
+    const uniqueKeys = new Set(playerKeys);
+    if (playerKeys.length !== uniqueKeys.size) {
+      console.error(`⚠️ [SEND] DUPLICATES IN ANALYSIS ARRAY!`);
+      console.error(`  Total: ${playerKeys.length}, Unique: ${uniqueKeys.size}`);
+      console.error(`  Players:`, playerKeys);
+    }
+
     console.log('  Analysis data sample:', JSON.stringify(analysis.map(p => ({
       username: p.username,
       tagLine: p.tagLine,
