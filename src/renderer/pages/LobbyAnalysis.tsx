@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { PlayerChip } from '@/components/PlayerChip'
 import { StatsPanel } from '@/components/StatsPanel'
@@ -130,68 +130,35 @@ export function LobbyAnalysis() {
   const bubbleTimer = useRef<NodeJS.Timeout | null>(null)
   const lastStatusKey = useRef<string | null>(null)
   const prevIsLiveRef = useRef<boolean>(false)
+  const lastLoadedMatchId = useRef<string | null>(null)
 
   const loadLastRoster = useCallback(async () => {
     if (!window.api?.getLastMatchRoster || !window.api?.getUserConfig) {
-      console.log('[Rank] Missing API methods')
+      console.log('[LastRoster] ⚠️ API methods not available')
       setRosterLoading(false)
       setRosterError('API methods not available')
       return
     }
 
-    // Clear old roster data before loading new data to prevent flash
-    setLastRoster(null)
     setRosterLoading(true)
     try {
       const res = await window.api.getLastMatchRoster()
       if (res.success && res.data) {
-        setLastRoster(res.data)
-        setRosterError(null)
-
-        // DISABLED: Rank fetching requires production API key (not available with development key)
-        // See DEVELOPMENT.md for instructions to re-enable when production key is available
-        /*
-        // Fetch ranks for all players in the roster
-        const config = await window.api.getUserConfig()
-        console.log('[Rank] Config:', config)
-        console.log('[Rank] Players in roster:', res.data.players?.length)
-        console.log('[Rank] Has getPlayerRank API:', !!window.api.getPlayerRank)
-
-        if (config && res.data.players && window.api.getPlayerRank) {
-          const ranks: Record<string, PlayerRank | null> = {}
-
-          // Fetch ranks in parallel
-          console.log('[Rank] Fetching ranks for', res.data.players.length, 'players')
-          await Promise.all(
-            res.data.players.map(async (player: RosterPlayer) => {
-              try {
-                console.log(`[Rank] Fetching rank for ${player.username}#${player.tagLine} (${player.puuid}) in ${config.region}`)
-                const rankRes = await window.api.getPlayerRank(player.puuid, config.region)
-                console.log(`[Rank] Response for ${player.username}:`, rankRes)
-                if (rankRes.success && rankRes.data) {
-                  ranks[player.puuid] = rankRes.data.rank
-                } else {
-                  ranks[player.puuid] = null
-                }
-              } catch (error) {
-                console.error(`[Rank] Failed to fetch rank for ${player.username}:`, error)
-                ranks[player.puuid] = null
-              }
-            })
-          )
-
-          console.log('[Rank] Final ranks:', ranks)
-          setPlayerRanks(ranks)
+        // Only update if it's a different match to prevent unnecessary re-renders
+        if (lastLoadedMatchId.current !== res.data.matchId) {
+          console.log(`[LastRoster] 🔄 Loading match ${res.data.matchId}`)
+          lastLoadedMatchId.current = res.data.matchId
+          setLastRoster(res.data)
+          setRosterError(null)
         }
-        */
       } else {
         setLastRoster(null)
-        setRosterError(res.error || 'No recent match found. Import matches from Settings to see your last game roster.')
+        setRosterError(res.error || 'Failed to load roster')
       }
-    } catch (error) {
-      console.error('Failed to load last match roster:', error)
+    } catch (error: any) {
+      console.error('[LastRoster] ❌ Error loading roster:', error)
       setLastRoster(null)
-      setRosterError('Unable to load your last match roster.')
+      setRosterError(error.message || 'Failed to load roster')
     } finally {
       setRosterLoading(false)
     }
@@ -259,25 +226,19 @@ export function LobbyAnalysis() {
   }
 
   const buildRosterRows = (players: RosterPlayer[]) => {
-    // Deduplicate by PUUID (keep first occurrence)
-    const seenPuuids = new Set<string>()
-    const uniquePlayers = players.filter((p) => {
-      if (seenPuuids.has(p.puuid)) {
-        console.warn(`Duplicate player detected in roster: ${formatRiotId(p.username, p.tagLine)} (${p.puuid})`)
-        return false
-      }
-      seenPuuids.add(p.puuid)
-      return true
-    })
+    // No deduplication - trust the data source (database for roster, backend for live lobby)
+    // Just organize players into display rows
 
-    // Check if this is an Arena match (all players have placement data)
-    const isArenaMatch = uniquePlayers.length > 0 && uniquePlayers.every(p => p.placement !== null && p.placement !== undefined)
+    // Check if this is an Arena match (all players have placement data between 1-8)
+    // Arena has 16 players in 8 teams, each team gets a placement 1-8
+    const isArenaMatch = players.length === 16 &&
+                         players.every(p => typeof p.placement === 'number' && p.placement >= 1 && p.placement <= 8)
 
     if (isArenaMatch) {
       // For Arena: Group by placement (each placement has 2 teammates)
       // Sort by placement 1-8
       const byPlacement: Record<number, RosterPlayer[]> = {}
-      uniquePlayers.forEach((p) => {
+      players.forEach((p) => {
         const placement = p.placement!
         if (!byPlacement[placement]) byPlacement[placement] = []
         byPlacement[placement].push(p)
@@ -304,7 +265,7 @@ export function LobbyAnalysis() {
     }
 
     const byTeam: Record<number, RosterPlayer[]> = {}
-    uniquePlayers.forEach((p) => {
+    players.forEach((p) => {
       const teamKey = typeof p.teamId === 'number' ? p.teamId : 0
       if (!byTeam[teamKey]) byTeam[teamKey] = []
       byTeam[teamKey].push(p)
@@ -346,7 +307,7 @@ export function LobbyAnalysis() {
     }
 
     // Fallback for multi-team / role-less modes (e.g., ARAM)
-    const sorted = [...uniquePlayers].sort((a, b) => {
+    const sorted = [...players].sort((a, b) => {
       if ((a.teamId ?? 0) !== (b.teamId ?? 0)) return (a.teamId ?? 0) - (b.teamId ?? 0)
       const roleDiff = getRoleOrder(a) - getRoleOrder(b)
       if (roleDiff !== 0) return roleDiff
@@ -442,6 +403,15 @@ export function LobbyAnalysis() {
       })
 
       const isLiveNow = isLiveState(normalized)
+
+      // Only clear when transitioning to non-live states (Lobby, None, ClientClosed)
+      // Don't clear when entering live state - let lobby-update handle it
+      if (!isLiveNow && prevIsLiveRef.current) {
+        console.log('[LobbyAnalysis] 🗑️ Clearing cached players - exited live state to:', normalized)
+        setDetectedPlayers([])
+        cachedDetectedPlayers = []
+      }
+
       if (!isLiveNow && prevIsLiveRef.current) {
         // Don't load roster immediately on EndOfGame - wait for auto-import to finish
         if (normalized !== 'endofgame' && normalized !== 'preendofgame' && normalized !== 'waitingforstats') {
@@ -486,26 +456,35 @@ export function LobbyAnalysis() {
 
     // Listen for auto-monitor updates
     const cleanupLobby = window.api.onLobbyUpdate((data) => {
-      console.log('📥 Received lobby-update event:', data)
+      console.log('📥 [FRONTEND] Received lobby-update event:', data)
       if (data.success && data.data) {
-        console.log('  Setting detected players:', data.data.analysis.length)
+        console.log('  [FRONTEND] Setting detected players:', data.data.analysis.length)
         const rawPlayers = data.data.analysis || []
+
+        console.log('  [FRONTEND] Raw player keys from backend:', rawPlayers.map(p => formatRiotId(p.username, p.tagLine)))
 
         // Deduplicate by PUUID (or username#tagLine if no PUUID)
         const seen = new Set()
-        const players = rawPlayers.filter(player => {
+        const players = rawPlayers.filter((player, index) => {
           const key = player.puuid || formatRiotId(player.username, player.tagLine)
+
           if (seen.has(key)) {
-            console.warn('⚠️  Duplicate player detected and removed:', key)
+            console.warn(`⚠️  [FRONTEND] Duplicate player detected at index ${index} and removed:`, key)
             return false
           }
+
           seen.add(key)
+          console.log(`  [FRONTEND] ✓ Keeping player ${index}: ${formatRiotId(player.username, player.tagLine)} (key: ${key})`)
           return true
         })
 
-        console.log('  After deduplication:', players.length, 'unique players')
+        console.log('  [FRONTEND] After deduplication:', players.length, 'unique players')
+        console.log('  [FRONTEND] Deduplicated player keys:', players.map(p => formatRiotId(p.username, p.tagLine)))
+
+        console.log('  [FRONTEND] ✅ Setting state with', players.length, 'players')
         setDetectedPlayers(players)
         cachedDetectedPlayers = players
+        console.log('  [FRONTEND] ✅ cachedDetectedPlayers now has', cachedDetectedPlayers.length, 'players')
 
         if (data.data.analysis.length === 0) {
           const nextStatus = {
@@ -707,7 +686,14 @@ export function LobbyAnalysis() {
 
   const normalizedState = (gameflowStatus?.state || '').trim().toLowerCase()
   const isLiveView = isLiveState(normalizedState)
-  const rosterLayout = buildRosterRows(lastRoster?.players || [])
+
+  // Memoize roster layout to prevent unnecessary recalculations
+  // Use matchId as dependency to ensure we rebuild when roster actually changes
+  const rosterLayout = useMemo(() => {
+    const players = lastRoster?.players || []
+    return buildRosterRows(players)
+  }, [lastRoster?.matchId, lastRoster?.players])
+
   const lastMatchPlayedAt = lastRoster?.gameCreation ? new Date(lastRoster.gameCreation) : null
 
   const renderRosterCell = (player: RosterPlayer | undefined, sideLabel: string, key: string) => {
@@ -798,6 +784,17 @@ export function LobbyAnalysis() {
             <CardContent>
               {detectedPlayers.length > 0 ? (
                 <div className="space-y-3">
+                  {(() => {
+                    // Only log when there are duplicate keys (error condition)
+                    const keys = detectedPlayers.map(p => formatRiotId(p.username, p.tagLine));
+                    const uniqueKeys = new Set(keys);
+                    if (keys.length !== uniqueKeys.size) {
+                      console.error(`[Render] DUPLICATE KEYS IN RENDER! Total: ${keys.length}, Unique: ${uniqueKeys.size}`);
+                      console.error('[Render] Keys:', keys);
+                      console.error('[Render] Full player data:', detectedPlayers);
+                    }
+                    return null;
+                  })()}
                   {detectedPlayers.map((player) => {
                     const hasDetails = Boolean(player.asEnemy || player.asAlly || (player.games && player.games.length > 0));
                     const playerKey = formatRiotId(player.username, player.tagLine);

@@ -474,8 +474,8 @@ export function PlayerChip({
                   {encounterCount} {encounterCount === 1 ? 'game' : 'games'}
                 </span>
               )}
-              {/* Arena placement badge */}
-              {placement !== null && placement !== undefined && (
+              {/* Arena placement badge - only show for valid placements (1-8) */}
+              {placement !== null && placement !== undefined && placement > 0 && (
                 <div className={cn(
                   "px-2 py-0.5 rounded text-xs font-semibold",
                   placement === 1
