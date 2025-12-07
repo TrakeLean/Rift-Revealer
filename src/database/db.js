@@ -190,6 +190,45 @@ class DatabaseManager {
       console.log('  Migration complete: notification settings columns added');
     }
 
+    // Add weak tag type to player_tags CHECK constraint
+    const playerTagsTable = this.db.prepare(`
+      SELECT sql FROM sqlite_master
+      WHERE type='table' AND name='player_tags'
+    `).get();
+
+    const hasWeakTag = playerTagsTable?.sql?.includes("'weak'");
+    if (!hasWeakTag) {
+      console.log('Running migration: Adding weak tag type to player_tags');
+      this.db.exec('PRAGMA foreign_keys=OFF');
+      this.db.exec(`
+        BEGIN TRANSACTION;
+
+        CREATE TABLE player_tags_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          puuid TEXT NOT NULL,
+          username TEXT NOT NULL,
+          tag_line TEXT NOT NULL,
+          tag_type TEXT NOT NULL CHECK(tag_type IN ('toxic', 'friendly', 'notable', 'duo', 'weak')),
+          note TEXT,
+          created_at INTEGER NOT NULL,
+          UNIQUE(puuid, tag_type)
+        );
+
+        INSERT INTO player_tags_new (id, puuid, username, tag_line, tag_type, note, created_at)
+        SELECT id, puuid, username, tag_line, tag_type, note, created_at
+        FROM player_tags;
+
+        DROP TABLE player_tags;
+        ALTER TABLE player_tags_new RENAME TO player_tags;
+
+        CREATE INDEX IF NOT EXISTS idx_player_tags_puuid ON player_tags(puuid);
+
+        COMMIT;
+      `);
+      this.db.exec('PRAGMA foreign_keys=ON');
+      console.log('  Migration complete: weak tag type added');
+    }
+
     // Add placement column to match_participants for Arena mode
     const hasPlacement = this.db.prepare(`
       SELECT COUNT(*) as count FROM pragma_table_info('match_participants')

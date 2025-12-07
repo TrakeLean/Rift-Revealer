@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS player_tags (
     puuid TEXT NOT NULL,
     username TEXT NOT NULL,
     tag_line TEXT NOT NULL,
-    tag_type TEXT NOT NULL CHECK(tag_type IN ('toxic', 'friendly', 'notable', 'duo')),
+    tag_type TEXT NOT NULL CHECK(tag_type IN ('toxic', 'friendly', 'notable', 'duo', 'weak')),
     note TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE(puuid, tag_type)
