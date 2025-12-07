@@ -508,7 +508,7 @@ export function PlayerChip({
             <div className={sectionClass}>
               <div className="flex gap-2 text-[11px] flex-wrap items-center">
                 {/* Ally Stats (shown first) */}
-                {asAlly && asAlly.games > 0 && (
+                {asAlly && asAlly.games > 1 && (
                   <div className="flex items-center gap-1">
                     <span className="text-[11px] text-emerald-400/70 uppercase font-medium">Teammate:</span>
                     {asAlly.avgPlacement !== null && asAlly.avgPlacement !== undefined ? (
@@ -531,7 +531,7 @@ export function PlayerChip({
                 )}
 
                 {/* Enemy Stats */}
-                {asEnemy && asEnemy.games > 0 && (
+                {asEnemy && asEnemy.games > 1 && (
                   <div className="flex items-center gap-1">
                     <span className="text-[11px] text-red-400/70 uppercase font-medium">Opponent:</span>
                     {asEnemy.avgPlacement !== null && asEnemy.avgPlacement !== undefined ? (
