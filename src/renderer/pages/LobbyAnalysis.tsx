@@ -7,6 +7,7 @@ import { ModeFilter } from '@/components/ModeFilter'
 import { Activity, CheckCircle2, Clock, AlertCircle, Gamepad2, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AnalysisResult, LastMatchRoster, RosterPlayer, PlayerRank } from '../types'
+import { motion } from 'framer-motion'
 
 // Helper to format Riot ID
 const formatRiotId = (username?: string, tagLine?: string) => {
@@ -975,13 +976,22 @@ export function LobbyAnalysis() {
         <button
           onClick={handleBubbleClick}
           className={cn(
-            "flex items-center gap-3 rounded-full shadow-lg transition-all backdrop-blur-sm",
+            "relative overflow-hidden flex items-center gap-3 rounded-full shadow-lg transition-all backdrop-blur-sm",
             bubbleExpanded ? "px-3 py-2" : "p-3",
             bubbleTone.bg,
             "hover:border-primary/50",
             !bubbleExpanded && "opacity-95"
-          )}
-          >
+          )}>
+          <motion.div
+            className="pointer-events-none absolute inset-0 bg-[url('/logo.png')] bg-center bg-cover"
+            animate={
+              bubbleExpanded
+                ? { scale: [1, 1.05, 1], opacity: [0.1, 0.16, 0.1] }
+                : { scale: 1, opacity: 0.1 }
+            }
+            transition={bubbleExpanded ? { duration: 4.0, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 }}
+            initial={false}
+          />
           <div className="flex items-center justify-center h-10 w-10 rounded-full shadow-sm">
             <StateIcon className={cn("h-6 w-6", stateInfo.color)} />
           </div>
