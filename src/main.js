@@ -276,8 +276,7 @@ function createWindow() {
       if (!mainWindow.hasShownTrayNotification) {
         tray.displayBalloon({
           title: 'Rift Revealer',
-          content: 'App is still running in the background and tracking your games!',
-          icon: iconPath
+          content: 'App is still running in the background and tracking your games!'
         });
         mainWindow.hasShownTrayNotification = true;
       }
