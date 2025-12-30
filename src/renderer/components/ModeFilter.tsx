@@ -164,7 +164,7 @@ export function ModeFilter({ selectedModes, onModesChange, players = [] }: ModeF
 
                       {/* Tooltip */}
                       {hasStats && (
-                        <div className="pointer-events-none absolute left-full ml-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 w-48">
+                        <div className="pointer-events-none absolute right-full mr-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50 w-48">
                           <div className="rounded-lg border border-border bg-popover p-3 shadow-lg text-xs">
                             <div className="font-medium mb-2">{config.label}</div>
                             <div className="space-y-1 text-muted-foreground">
