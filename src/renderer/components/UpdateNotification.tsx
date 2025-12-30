@@ -93,6 +93,16 @@ export function UpdateNotification() {
     }
   }
 
+  const handleSkipVersion = async () => {
+    if (!updateInfo) return
+    try {
+      await window.api.skipUpdateVersion(updateInfo.latestVersion)
+      setIsOpen(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to skip version')
+    }
+  }
+
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 B'
     const k = 1024
@@ -186,10 +196,15 @@ export function UpdateNotification() {
         <DialogFooter className="gap-2">
           {!isDownloading && !isDownloaded && (
             <>
-              <Button variant="ghost" onClick={handleClose} className="gap-2">
-                <X className="h-4 w-4" />
-                Remind Me Later
-              </Button>
+              <div className="flex gap-2 flex-1">
+                <Button variant="ghost" onClick={handleClose} className="gap-2">
+                  <X className="h-4 w-4" />
+                  Remind Me Later
+                </Button>
+                <Button variant="ghost" onClick={handleSkipVersion} className="gap-2 text-muted-foreground">
+                  Skip This Version
+                </Button>
+              </div>
               <Button onClick={handleDownload} className="gap-2 bg-primary hover:bg-primary/90">
                 <Download className="h-4 w-4" />
                 Download Update

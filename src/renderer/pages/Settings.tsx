@@ -21,6 +21,7 @@ export function Settings({ onConfigSaved }: SettingsProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [autoUpdateCheck, setAutoUpdateCheck] = useState(true)
+  const [showUpdateNotifications, setShowUpdateNotifications] = useState(true)
   const [autoStart, setAutoStart] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<string | null>(null)
@@ -57,6 +58,7 @@ export function Settings({ onConfigSaved }: SettingsProps) {
       if (savedConfig) {
         setConfig(savedConfig)
         setAutoUpdateCheck(savedConfig.auto_update_check !== 0) // Default to true if not set
+        setShowUpdateNotifications(savedConfig.show_update_notifications !== 0) // Default to true if not set
 
         // Load notification settings (default to OFF for master, but ON for individual tags except duo)
         setNotificationsEnabled(savedConfig.notifications_enabled === 1)
@@ -92,6 +94,17 @@ export function Settings({ onConfigSaved }: SettingsProps) {
       console.error('Failed to save auto-update setting:', error)
       // Revert on error
       setAutoUpdateCheck(!checked)
+    }
+  }
+
+  const handleShowUpdateNotificationsToggle = async (checked: boolean) => {
+    setShowUpdateNotifications(checked)
+    try {
+      await window.api.setShowUpdateNotifications(checked)
+    } catch (error) {
+      console.error('Failed to save update notification setting:', error)
+      // Revert on error
+      setShowUpdateNotifications(!checked)
     }
   }
 
@@ -474,6 +487,21 @@ export function Settings({ onConfigSaved }: SettingsProps) {
               id="auto-update"
               checked={autoUpdateCheck}
               onCheckedChange={handleAutoUpdateToggle}
+            />
+          </div>
+
+          {/* Show update notifications toggle */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="show-update-notifications">Show Update Notifications</Label>
+              <p className="text-xs text-muted-foreground">
+                Display popup when new updates are available
+              </p>
+            </div>
+            <Switch
+              id="show-update-notifications"
+              checked={showUpdateNotifications}
+              onCheckedChange={handleShowUpdateNotificationsToggle}
             />
           </div>
 

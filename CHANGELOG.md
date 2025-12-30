@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Update notification preferences**: Added user controls for update notifications
+  - New "Show Update Notifications" toggle in Settings to completely disable update popups
+  - "Skip This Version" button in update notification dialog to skip specific versions
+  - Skipped versions won't show notifications until a newer version is released
+  - Manual "Check for Updates" always shows popup regardless of skip setting
+  - All preferences persist in database
+
 ## [1.8.2] - 2025-12-30
 
 ### Fixed

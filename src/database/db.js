@@ -203,6 +203,21 @@ class DatabaseManager {
       console.log('  Migration complete: notification settings columns added');
     }
 
+    // Add update notification settings columns to user_config if they don't exist
+    const hasShowUpdateNotifications = this.db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('user_config')
+      WHERE name='show_update_notifications'
+    `).get();
+
+    if (hasShowUpdateNotifications.count === 0) {
+      console.log('Running migration: Adding update notification settings to user_config');
+      this.db.exec(`
+        ALTER TABLE user_config ADD COLUMN show_update_notifications INTEGER DEFAULT 1;
+        ALTER TABLE user_config ADD COLUMN skipped_update_version TEXT;
+      `);
+      console.log('  Migration complete: update notification settings columns added');
+    }
+
     // Add weak tag type to player_tags CHECK constraint
     const playerTagsTable = this.db.prepare(`
       SELECT sql FROM sqlite_master
@@ -1403,6 +1418,41 @@ class DatabaseManager {
       UPDATE user_config SET auto_start = ? WHERE id = 1
     `);
     stmt.run(enabled ? 1 : 0);
+  }
+
+  /**
+   * Update show update notifications setting
+   * @param {boolean} enabled
+   */
+  setShowUpdateNotifications(enabled) {
+    const stmt = this.db.prepare(`
+      UPDATE user_config SET show_update_notifications = ? WHERE id = 1
+    `);
+    stmt.run(enabled ? 1 : 0);
+  }
+
+  /**
+   * Set skipped update version
+   * @param {string|null} version
+   */
+  setSkippedUpdateVersion(version) {
+    const stmt = this.db.prepare(`
+      UPDATE user_config SET skipped_update_version = ? WHERE id = 1
+    `);
+    stmt.run(version);
+  }
+
+  /**
+   * Get skipped update version
+   * @returns {string|null}
+   */
+  getSkippedUpdateVersion() {
+    try {
+      const config = this.getUserConfig();
+      return config?.skipped_update_version || null;
+    } catch (error) {
+      return null;
+    }
   }
 
   /**

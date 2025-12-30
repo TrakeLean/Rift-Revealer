@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS user_config (
     auto_update_check INTEGER DEFAULT 1,
     auto_start INTEGER DEFAULT 0,
     ddragon_version TEXT,
-    ddragon_version_checked_at INTEGER
+    ddragon_version_checked_at INTEGER,
+    show_update_notifications INTEGER DEFAULT 1,
+    skipped_update_version TEXT
 );
 
 -- Players table

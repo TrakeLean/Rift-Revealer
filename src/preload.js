@@ -67,6 +67,8 @@ contextBridge.exposeInMainWorld('api', {
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   setAutoUpdateCheck: (enabled) => ipcRenderer.invoke('set-auto-update-check', enabled),
+  setShowUpdateNotifications: (enabled) => ipcRenderer.invoke('set-show-update-notifications', enabled),
+  skipUpdateVersion: (version) => ipcRenderer.invoke('skip-update-version', version),
   openDownloadUrl: (url) => ipcRenderer.invoke('open-download-url', url),
   onUpdateChecking: (callback) => {
     const handler = (event, data) => callback(data);

@@ -1731,6 +1731,20 @@ async function checkForUpdatesOnStartup() {
       const result = await updateChecker.checkForUpdates();
 
       if (result.hasUpdate) {
+        // Check if this version should be skipped
+        const skippedVersion = db.getSkippedUpdateVersion();
+        if (skippedVersion === result.latestVersion) {
+          console.log(`[Auto-Update] Skipping notification for version ${result.latestVersion} (user skipped)`);
+          return;
+        }
+
+        // Check if update notifications are enabled
+        const showNotifications = config?.show_update_notifications !== 0; // Default to true if not set
+        if (!showNotifications) {
+          console.log('[Auto-Update] Update notifications are disabled');
+          return;
+        }
+
         // Also call autoUpdater.checkForUpdates() so download will work
         console.log('[Auto-Update] Calling autoUpdater.checkForUpdates() to enable download...');
         autoUpdater.checkForUpdates().catch(err => {
@@ -1769,6 +1783,8 @@ ipcMain.handle('check-for-updates', async () => {
     }
 
     // If update is available, emit the update-available event to trigger the UpdateNotification popup
+    // For manual checks, always show the popup regardless of skip setting
+    // (user explicitly requested to check, so they should see what's available)
     if (result.hasUpdate && mainWindow) {
       mainWindow.webContents.send('update-available', {
         hasUpdate: result.hasUpdate,
@@ -1810,6 +1826,26 @@ ipcMain.handle('set-auto-update-check', async (event, enabled) => {
     return { success: true, message: 'Auto-update setting saved' };
   } catch (error) {
     console.error('Failed to save auto-update setting:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('set-show-update-notifications', async (_event, enabled) => {
+  try {
+    db.setShowUpdateNotifications(enabled);
+    return { success: true, message: 'Update notification setting saved' };
+  } catch (error) {
+    console.error('Failed to save update notification setting:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('skip-update-version', async (_event, version) => {
+  try {
+    db.setSkippedUpdateVersion(version);
+    return { success: true, message: 'Update version skipped' };
+  } catch (error) {
+    console.error('Failed to skip update version:', error);
     return { success: false, error: error.message };
   }
 });
