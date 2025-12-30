@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.3] - 2025-12-30
+
 ### Fixed
 - **Update download URL**: Fixed 404 error when downloading updates
   - Changed artifact naming to match electron-updater expectations

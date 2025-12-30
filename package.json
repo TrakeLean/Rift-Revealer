@@ -1,6 +1,6 @@
 {
   "name": "rift-revealer",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "description": "Rift Revealer - League of Legends lobby analyzer",
   "main": "src/main.js",
   "scripts": {
@@ -137,8 +137,11 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "${name}-Setup-${version}.${ext}"
     },
-    "artifactName": "${name}-Setup-${version}.${ext}"
+    "portable": {
+      "artifactName": "${name}-${version}.${ext}"
+    }
   }
 }
