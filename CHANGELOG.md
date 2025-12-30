@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Solution: Enhanced deduplication using database PUUID (`matchedPuuid`) instead of LCU PUUID
   - Handles PUUID encryption differences between LCU API (unencrypted) and Riot Match API (encrypted per API key)
   - Works correctly across name changes - same player tracked even after username/tag change
+- **Icon files restored**: System tray and taskbar icons now display correctly
+  - Regenerated `icon.ico` from current `logo.png` using png-to-ico
+  - Both files properly configured in package.json extraResources
 
 ### Added
 - **Comprehensive debug logging system**:
