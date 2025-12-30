@@ -193,6 +193,15 @@ export function Settings({ onConfigSaved }: SettingsProps) {
     })
   }
 
+  const handleTestNotification = () => {
+    // Send a test notification with sample data
+    window.api.sendTestNotification({
+      title: 'Test Notification',
+      body: 'This is how notifications will appear when you encounter tagged players in lobby.',
+      tag: 'Toxic' // Example tag
+    })
+  }
+
   const handleCheckForUpdates = async () => {
     setIsCheckingUpdate(true)
     setUpdateStatus(null)
@@ -610,6 +619,23 @@ export function Settings({ onConfigSaved }: SettingsProps) {
                 onCheckedChange={handleNotifyDuoToggle}
                 disabled={!notificationsEnabled}
               />
+            </div>
+
+            {/* Test notification button */}
+            <div className="pt-3 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTestNotification}
+                disabled={!notificationsEnabled}
+                className="gap-2"
+              >
+                <Bell className="h-4 w-4" />
+                Test Notification
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                Send a sample notification to see how they'll appear
+              </p>
             </div>
           </div>
         </CardContent>

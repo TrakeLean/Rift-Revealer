@@ -104,5 +104,6 @@ contextBridge.exposeInMainWorld('api', {
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
 
   // Notification settings
-  updateNotificationSettings: (settings) => ipcRenderer.invoke('update-notification-settings', settings)
+  updateNotificationSettings: (settings) => ipcRenderer.invoke('update-notification-settings', settings),
+  sendTestNotification: (data) => ipcRenderer.invoke('send-test-notification', data)
 });

@@ -1838,3 +1838,22 @@ ipcMain.handle('update-notification-settings', async (event, settings) => {
     return { success: false, error: error.message };
   }
 });
+
+// Send test notification
+ipcMain.handle('send-test-notification', async (event, data) => {
+  try {
+    const notification = new Notification({
+      title: data.title || 'Rift Revealer',
+      body: data.body || 'Test notification',
+      icon: app.isPackaged
+        ? path.join(process.resourcesPath, 'logo.png')
+        : path.join(__dirname, '../logo.png')
+    });
+
+    notification.show();
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to send test notification:', error);
+    return { success: false, error: error.message };
+  }
+});
