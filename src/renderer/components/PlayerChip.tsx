@@ -103,6 +103,16 @@ export function PlayerChip({
   const [ddragonVersion, setDdragonVersion] = useState<string>(ddragonVersionProp || '15.24.1') // Use prop or fallback
   const isClickable = Boolean(onClick)
 
+  // Sort tags in consistent order: Toxic, Weak, Friendly, Notable, Duo
+  const TAG_ORDER = ['toxic', 'weak', 'friendly', 'notable', 'duo']
+  const sortedTags = useMemo(() => {
+    return [...playerTags].sort((a, b) => {
+      const indexA = TAG_ORDER.indexOf(a.tag_type)
+      const indexB = TAG_ORDER.indexOf(b.tag_type)
+      return indexA - indexB
+    })
+  }, [playerTags])
+
   const debugSkin = (label: string, detail?: unknown) => {
     // Limit noisy debug logging to non-production builds
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -561,9 +571,9 @@ export function PlayerChip({
           {(encounterCount > 0 || byMode || playerTags.length > 0 || lastSeen?.champion || championName) && (
             <ModeStatsRow byMode={byMode}>
                 {/* Tags */}
-                {playerTags.length > 0 && (
+                {sortedTags.length > 0 && (
                   <div className="flex gap-1.5 flex-wrap">
-                    {playerTags.map((tag, idx) => (
+                    {sortedTags.map((tag, idx) => (
                       <div key={idx} className="relative group">
                         <TagPill
                           label={
