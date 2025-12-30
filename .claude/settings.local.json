@@ -76,7 +76,9 @@
       "Bash(npm run start)",
       "Bash(pkill:*)",
       "Bash(npx:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(export:*)",
+      "Bash(export RIOT_REGION=\"euw1\")"
     ],
     "deny": [],
     "ask": []

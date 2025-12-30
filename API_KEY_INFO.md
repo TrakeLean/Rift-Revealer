@@ -19,6 +19,7 @@ This app requires access to the following Riot API endpoints:
 - `GET /lol/match/v5/matches/by-puuid/{puuid}/ids`
 - `GET /lol/match/v5/matches/{matchId}`
 - Used for: Match history import
+- **Known Limitation:** ARAM Mayhem (queue 2400) is not available via API ([GitHub Issue #1109](https://github.com/RiotGames/developer-relations/issues/1109))
 
 ---
 
