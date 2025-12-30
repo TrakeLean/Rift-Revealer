@@ -138,6 +138,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    }
+    },
+    "artifactName": "${name}-Setup-${version}.${ext}"
   }
 }

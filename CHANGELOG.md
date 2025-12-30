@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Update download URL**: Fixed 404 error when downloading updates
+  - Changed artifact naming to match electron-updater expectations
+  - Installer now named `rift-revealer-Setup-{version}.exe` instead of `Rift.Revealer.Setup.{version}.exe`
+
 ### Added
 - **Update notification preferences**: Added user controls for update notifications
   - New "Show Update Notifications" toggle in Settings to completely disable update popups
