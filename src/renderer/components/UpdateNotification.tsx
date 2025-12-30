@@ -93,7 +93,7 @@ export function UpdateNotification() {
   }
 
   const handleClose = () => {
-    if (!isDownloading && !isDownloaded) {
+    if (!isDownloading) {
       setIsOpen(false)
     }
   }

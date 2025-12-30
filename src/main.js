@@ -896,7 +896,8 @@ function showPlayerDetectionNotification(analysis) {
       const notification = new Notification({
         title: 'Player Detected!',
         body: `${playerName}\nRecord: ${record} (${winRate}% WR)${tagText}${notesText}`,
-        silent: false
+        silent: false,
+        timeoutType: 'default'
       });
 
       notification.on('click', () => {
@@ -919,7 +920,8 @@ function showPlayerDetectionNotification(analysis) {
       const notification = new Notification({
         title: `${filteredAnalysis.length} Players Detected!`,
         body: `${playerList}${moreText}`,
-        silent: false
+        silent: false,
+        timeoutType: 'default'
       });
 
       notification.on('click', () => {

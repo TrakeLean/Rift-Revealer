@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.4] - 2025-12-30
+
+### Fixed
+- **"Install Later" button**: Fixed issue where clicking "Install Later" after update download didn't close the dialog
+  - Modified handleClose function to allow closing when update is downloaded
+- **Notification icon display**: Fixed inconsistency where real notifications showed app icon in message body
+  - Added `timeoutType: 'default'` to player detection notifications to match test notification format
+  - App icon now only appears in notification header, not in message body
+
 ## [1.8.3] - 2025-12-30
 
 ### Fixed
