@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Previously only automatic startup checks showed the styled popup
   - Manual checks now emit `update-available` event to display the same UI
   - Consistent update notification experience across automatic and manual checks
+- **Update download functionality**: Fixed "Please check update first" error when clicking "Download Update"
+  - Both automatic and manual update checks now initialize electron-updater properly
+  - Calls `autoUpdater.checkForUpdates()` when update is detected to enable download
+  - Download button now works correctly from both startup notifications and manual checks
 
 ## [1.8.1] - 2025-12-30
 

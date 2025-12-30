@@ -1731,6 +1731,12 @@ async function checkForUpdatesOnStartup() {
       const result = await updateChecker.checkForUpdates();
 
       if (result.hasUpdate) {
+        // Also call autoUpdater.checkForUpdates() so download will work
+        console.log('[Auto-Update] Calling autoUpdater.checkForUpdates() to enable download...');
+        autoUpdater.checkForUpdates().catch(err => {
+          console.error('[Auto-Update] autoUpdater.checkForUpdates() failed:', err);
+        });
+
         // Send update notification to renderer to show custom dialog
         mainWindow?.webContents.send('update-available', {
           hasUpdate: result.hasUpdate,
@@ -1752,6 +1758,15 @@ async function checkForUpdatesOnStartup() {
 ipcMain.handle('check-for-updates', async () => {
   try {
     const result = await updateChecker.checkForUpdates();
+
+    // If update is available, also call autoUpdater.checkForUpdates() so download will work
+    if (result.hasUpdate && app.isPackaged) {
+      console.log('[Auto-Update] Calling autoUpdater.checkForUpdates() to enable download...');
+      // This will populate autoUpdater's internal state so downloadUpdate() will work
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error('[Auto-Update] autoUpdater.checkForUpdates() failed:', err);
+      });
+    }
 
     // If update is available, emit the update-available event to trigger the UpdateNotification popup
     if (result.hasUpdate && mainWindow) {
