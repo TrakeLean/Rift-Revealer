@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.6] - 2025-12-30
+
+### Fixed
+- **System tray notification icon**: Removed app icon from system tray balloon notification message body
+  - Icon now only appears in notification header, consistent with other notifications
+  - Applies to "minimize to tray" notification shown on first window close
+
 ## [1.8.5] - 2025-12-30
 
 ### Changed
