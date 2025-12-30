@@ -262,6 +262,12 @@ Rift-Revealer/
 - Database is stored in: `C:\Users\{YourName}\AppData\Roaming\rift-revealer\database\`
 - If corrupted, delete the database folder and re-import your match history
 
+### Debug Logs
+- Debug logs are stored in: `C:\Users\{YourName}\AppData\Roaming\rift-revealer\debug-logs\`
+- Each session creates a timestamped log file (e.g., `lobby-2025-12-30T12-34-56.log`)
+- Logs help troubleshoot player detection and deduplication issues
+- Safe to delete old log files if they accumulate
+
 ### After Updating to v1.6.0
 - **Database incompatibility**: v1.6.0 uses a new database schema
 - **Action required**: Delete `C:\Users\{YourName}\AppData\Roaming\rift-revealer\database\` folder
