@@ -1748,18 +1748,19 @@ ipcMain.handle('set-auto-update-check', async (event, enabled) => {
 });
 
 // Download the update (called when user clicks "Download Update")
-// Opens the browser to the GitHub release download page
+// Uses electron-updater to download in background and auto-install
 ipcMain.handle('download-update', async () => {
   try {
-    const result = await updateChecker.checkForUpdates();
-    if (result.hasUpdate && result.downloadUrl) {
-      await shell.openExternal(result.downloadUrl);
-      return { success: true };
-    } else {
-      return { success: false, error: 'No update available' };
-    }
+    console.log('[Auto-Update] Starting download...');
+
+    // electron-updater will automatically download the update
+    // Progress events will be sent via 'download-progress'
+    // Completion will trigger 'update-downloaded' event
+    await autoUpdater.downloadUpdate();
+
+    return { success: true };
   } catch (error) {
-    console.error('Failed to download update:', error);
+    console.error('[Auto-Update] Failed to download update:', error);
     return { success: false, error: error.message };
   }
 });

@@ -8,7 +8,8 @@ import {
   DialogTitle,
 } from './ui/dialog'
 import { Button } from './ui/button'
-import { Download, X, Sparkles, ArrowRight, Loader2 } from 'lucide-react'
+import { Progress } from './ui/progress'
+import { Download, X, Sparkles, ArrowRight, Loader2, RefreshCw } from 'lucide-react'
 
 interface UpdateInfo {
   hasUpdate: boolean
@@ -19,10 +20,18 @@ interface UpdateInfo {
   releaseDate?: string
 }
 
+interface DownloadProgress {
+  percent: number
+  transferred: number
+  total: number
+}
+
 export function UpdateNotification() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
+  const [isDownloaded, setIsDownloaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -31,11 +40,27 @@ export function UpdateNotification() {
       setUpdateInfo(info)
       setIsOpen(true)
       setIsDownloading(false)
+      setDownloadProgress(null)
+      setIsDownloaded(false)
       setError(null)
+    })
+
+    // Listen for download progress
+    const cleanupProgress = window.api.onUpdateDownloadProgress((progress: DownloadProgress) => {
+      setDownloadProgress(progress)
+    })
+
+    // Listen for download complete
+    const cleanupDownloaded = window.api.onUpdateDownloaded(() => {
+      setIsDownloading(false)
+      setIsDownloaded(true)
+      setDownloadProgress(null)
     })
 
     return () => {
       cleanupAvailable()
+      cleanupProgress()
+      cleanupDownloaded()
     }
   }, [])
 
@@ -43,22 +68,37 @@ export function UpdateNotification() {
     setIsDownloading(true)
     setError(null)
     try {
-      await window.api.downloadUpdate()
-      // Browser opened, close the dialog after a brief delay
-      setTimeout(() => {
+      const result = await window.api.downloadUpdate()
+      if (!result.success) {
+        setError(result.error || 'Failed to start download')
         setIsDownloading(false)
-        setIsOpen(false)
-      }, 1000)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open download page')
+      setError(err instanceof Error ? err.message : 'Failed to start download')
       setIsDownloading(false)
     }
   }
 
+  const handleInstall = async () => {
+    try {
+      await window.api.installUpdate()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to install update')
+    }
+  }
+
   const handleClose = () => {
-    if (!isDownloading) {
+    if (!isDownloading && !isDownloaded) {
       setIsOpen(false)
     }
+  }
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
   }
 
   if (!updateInfo) return null
@@ -111,6 +151,31 @@ export function UpdateNotification() {
             </div>
           )}
 
+          {/* Download progress */}
+          {isDownloading && downloadProgress && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Downloading...</span>
+                <span className="font-medium">
+                  {formatBytes(downloadProgress.transferred)} / {formatBytes(downloadProgress.total)}
+                </span>
+              </div>
+              <Progress value={downloadProgress.percent} className="h-2" />
+              <p className="text-xs text-muted-foreground text-center">
+                {Math.round(downloadProgress.percent)}%
+              </p>
+            </div>
+          )}
+
+          {/* Download complete message */}
+          {isDownloaded && (
+            <div className="rounded-lg border border-green-500/50 bg-green-500/10 p-3">
+              <p className="text-sm text-green-400 font-medium">
+                ✓ Update downloaded successfully! Click "Install & Restart" to complete the update.
+              </p>
+            </div>
+          )}
+
           {/* Error message */}
           {error && (
             <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
@@ -120,7 +185,7 @@ export function UpdateNotification() {
         </div>
 
         <DialogFooter className="gap-2">
-          {!isDownloading && (
+          {!isDownloading && !isDownloaded && (
             <>
               <Button variant="ghost" onClick={handleClose} className="gap-2">
                 <X className="h-4 w-4" />
@@ -136,8 +201,21 @@ export function UpdateNotification() {
           {isDownloading && (
             <Button disabled className="gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Opening download page...
+              Downloading...
             </Button>
+          )}
+
+          {isDownloaded && (
+            <>
+              <Button variant="ghost" onClick={handleClose} className="gap-2">
+                <X className="h-4 w-4" />
+                Install Later
+              </Button>
+              <Button onClick={handleInstall} className="gap-2 bg-green-600 hover:bg-green-700">
+                <RefreshCw className="h-4 w-4" />
+                Install & Restart
+              </Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>

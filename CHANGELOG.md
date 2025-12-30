@@ -7,11 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2025-12-30
+
 ### Added
 - **Test Notification button**: Added button in Settings to preview desktop notifications
   - Located in the Notifications section below tag filters
   - Shows a sample notification with app icon and example message
   - Helps users verify notification settings are working correctly
+- **Seamless auto-update system**: Updates now download and install in the background
+  - Click "Download Update" to download in the background (no browser opening)
+  - Live progress bar shows download status with percentage and file size
+  - When complete, click "Install & Restart" to apply the update
+  - Fully integrated with electron-updater for reliable auto-updates
+
+### Improved
+- **Consistent tag ordering**: Player tags now appear in consistent order across the app
+  - Order matches tag dialog: Toxic, Weak, Friendly, Notable, Duo
+  - Applied to all player cards throughout the app
+- **Mode filter tooltip positioning**: Tooltips now appear on the left side to prevent cutoff
+  - Previously extended beyond window edge when dropdown was on right side
+  - Now positioned to always stay within visible area
 
 ### Fixed
 - **Update notification consistency**: Manual "Check for Updates" now uses the same beautiful UpdateNotification popup as automatic checks
@@ -24,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `setAppUserModelId()` to properly associate app with its icon on Windows
   - System tray icon was already working correctly
   - Added debug logging for icon paths to help diagnose icon loading issues
+
+### Changed
+- **Product name formatting**: Changed from "RiftRevealer" to "Rift Revealer" (with space)
 
 ### Documentation
 - Added ARAM Mayhem API limitation to documentation
