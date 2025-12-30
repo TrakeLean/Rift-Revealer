@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, protocol, Notification, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, protocol, Notification, nativeImage, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -44,6 +44,20 @@ function pruneDebugLogs(limit = DEBUG_LOG_LIMIT) {
     }
   } catch (error) {
     console.error('[DebugLog] Failed to prune logs:', error);
+  }
+}
+
+function setupSkinFetchLogging() {
+  try {
+    const filter = { urls: ['https://ddragon.leagueoflegends.com/*'] };
+    session.defaultSession.webRequest.onCompleted(filter, (details) => {
+      if (details.resourceType !== 'image') return;
+      if (details.fromCache) return;
+      if (details.statusCode < 200 || details.statusCode >= 300) return;
+      console.log(`[Skin] Fetched image (network): ${details.url}`);
+    });
+  } catch (error) {
+    console.error('[Skin] Failed to attach fetch logger:', error);
   }
 }
 
@@ -410,6 +424,7 @@ app.whenReady().then(() => {
   // Removed local:// protocol - using direct CDN URLs instead
 
   try {
+    setupSkinFetchLogging();
     console.log('Initializing database...');
     db = new Database();
     console.log('Database object created');
@@ -1642,15 +1657,24 @@ ipcMain.handle('get-all-tagged-players', async () => {
  */
 async function fetchAndCacheDDragonVersion() {
   try {
-    // Check if we already have a version cached
-    const cachedVersion = db.getDDragonVersion();
-    if (cachedVersion) {
+    const versionInfo = db.getDDragonVersionInfo
+      ? db.getDDragonVersionInfo()
+      : { version: db.getDDragonVersion?.() ?? null, checkedAt: null };
+    const cachedVersion = versionInfo.version;
+    const checkedAt = versionInfo.checkedAt;
+    const refreshIntervalMs = 7 * 24 * 60 * 60 * 1000;
+    const isFresh = cachedVersion && checkedAt && (Date.now() - checkedAt) < refreshIntervalMs;
+
+    if (isFresh) {
       console.log(`Using cached Data Dragon version: ${cachedVersion}`);
       return cachedVersion;
     }
 
-    // Fetch latest version
-    console.log('Fetching latest Data Dragon version...');
+    if (cachedVersion) {
+      console.log('Cached Data Dragon version stale, refreshing...');
+    } else {
+      console.log('Fetching latest Data Dragon version...');
+    }
     const version = await riotApi.getLatestDDragonVersion();
     console.log(`Latest Data Dragon version: ${version}`);
 
@@ -1661,21 +1685,17 @@ async function fetchAndCacheDDragonVersion() {
     return version;
   } catch (error) {
     console.error('Failed to fetch/cache Data Dragon version:', error);
-    // Return fallback version on error
+    if (cachedVersion) {
+      console.log(`Using cached Data Dragon version after refresh failure: ${cachedVersion}`);
+      return cachedVersion;
+    }
     return '14.23.1';
   }
 }
 
 ipcMain.handle('get-ddragon-version', async () => {
   try {
-    // Try to get from database first
-    let version = db.getDDragonVersion();
-
-    // If not in database, fetch and cache it
-    if (!version) {
-      version = await fetchAndCacheDDragonVersion();
-    }
-
+    const version = await fetchAndCacheDDragonVersion();
     return { success: true, version };
   } catch (error) {
     console.error('Failed to get Data Dragon version:', error);

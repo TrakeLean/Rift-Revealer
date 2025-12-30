@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2025-12-30
+
 ### Added
 - **Debug log retention cap**: Automatically trims old debug log files to prevent indefinite growth
   - On startup, keeps only the newest 30 log files in `%APPDATA%\rift-revealer\debug-logs`
   - Implemented via `pruneDebugLogs()` function called after session header is written
   - Configurable via `DEBUG_LOG_LIMIT` constant in [main.js](src/main.js)
   - Newest log file is always preserved during pruning
+- **Weekly Data Dragon refresh**: Cached DDragon version now auto-refreshes weekly
+  - Stores last refresh time in `user_config.ddragon_version_checked_at`
+  - Falls back to cached version if refresh fails
 
 ## [1.8.0] - 2025-12-30
 
@@ -365,21 +370,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - All data stored locally (no external servers)
 - API key stored securely in local database
-- Read-only database in asar archive (now writable in userData)
-
-## [Unreleased]
-
-### Planned Features
-
-
-### Changed
-- Serve cached skin/champion tiles via a local protocol and strip external fallbacks to avoid blocked resources.
-- Added champion tile IPC handler and wiring so roster avatars can resolve without CommunityDragon.
-- Enabled Flex analysis in champ select by limiting anonymized queues to Ranked Solo/Duo.
-
----
-
-## Version History
-
-- **1.1.0** - Player tagging system + logo fixes
-- **1.0.0** - Initial release with core features

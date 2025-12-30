@@ -171,6 +171,19 @@ class DatabaseManager {
       console.log('  Migration complete: ddragon_version column added');
     }
 
+    const hasDDragonVersionCheckedAt = this.db.prepare(`
+      SELECT COUNT(*) as count FROM pragma_table_info('user_config')
+      WHERE name='ddragon_version_checked_at'
+    `).get();
+
+    if (hasDDragonVersionCheckedAt.count === 0) {
+      console.log('Running migration: Adding ddragon_version_checked_at column to user_config');
+      this.db.exec(`
+        ALTER TABLE user_config ADD COLUMN ddragon_version_checked_at INTEGER;
+      `);
+      console.log('  Migration complete: ddragon_version_checked_at column added');
+    }
+
     // Add notification settings columns to user_config if they don't exist
     const hasNotificationsEnabled = this.db.prepare(`
       SELECT COUNT(*) as count FROM pragma_table_info('user_config')
@@ -1435,11 +1448,23 @@ class DatabaseManager {
    * @returns {string|null} Version string or null if not set
    */
   getDDragonVersion() {
+    const info = this.getDDragonVersionInfo();
+    return info.version;
+  }
+
+  /**
+   * Get Data Dragon version and last checked time from database
+   * @returns {{version: string|null, checkedAt: number|null}}
+   */
+  getDDragonVersionInfo() {
     try {
       const config = this.getUserConfig();
-      return config?.ddragon_version || null;
+      return {
+        version: config?.ddragon_version || null,
+        checkedAt: config?.ddragon_version_checked_at || null
+      };
     } catch (error) {
-      return null;
+      return { version: null, checkedAt: null };
     }
   }
 
@@ -1447,11 +1472,11 @@ class DatabaseManager {
    * Set Data Dragon version in database
    * @param {string} version - Version string (e.g., "15.24.1")
    */
-  setDDragonVersion(version) {
+  setDDragonVersion(version, checkedAt = Date.now()) {
     const stmt = this.db.prepare(`
-      UPDATE user_config SET ddragon_version = ? WHERE id = 1
+      UPDATE user_config SET ddragon_version = ?, ddragon_version_checked_at = ? WHERE id = 1
     `);
-    stmt.run(version);
+    stmt.run(version, checkedAt);
   }
 
   close() {
