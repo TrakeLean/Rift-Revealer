@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.2] - 2025-12-30
+
 ### Fixed
 - **Update notification changelog display**: Release notes now show full content with scrolling instead of truncating at 400 characters
   - Removed character limit in UpdateNotification component
