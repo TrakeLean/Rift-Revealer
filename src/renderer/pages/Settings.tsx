@@ -200,14 +200,9 @@ export function Settings({ onConfigSaved }: SettingsProps) {
       const result = await window.api.checkForUpdates()
       if (result.success) {
         if (result.hasUpdate) {
-          setUpdateStatus(`Update available: ${result.latestVersion}`)
-          // Open download dialog
-          const shouldDownload = confirm(
-            `A new version is available!\n\nCurrent: ${result.currentVersion}\nLatest: ${result.latestVersion}\n\n${result.releaseName}\n\nWould you like to download it now?`
-          )
-          if (shouldDownload) {
-            await window.api.openDownloadUrl(result.downloadUrl)
-          }
+          // The update-available event will be emitted by the backend,
+          // which will trigger the UpdateNotification component automatically
+          setUpdateStatus(null) // Clear status since the nice popup will show
         } else {
           setUpdateStatus('You are running the latest version!')
         }

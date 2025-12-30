@@ -5,6 +5,17 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Update notification consistency**: Manual "Check for Updates" now uses the same beautiful UpdateNotification popup as automatic checks
+  - Previously used a basic confirm() dialog
+  - Now shows styled popup with changelog, version comparison, and download button
+
+### Documentation
+- Added ARAM Mayhem API limitation to documentation
+  - ARAM Mayhem (queue 2400) is not available via Riot API ([GitHub Issue #1109](https://github.com/RiotGames/developer-relations/issues/1109))
+
 ## [1.7.5] - 2025-12-30
 
 ### Fixed
