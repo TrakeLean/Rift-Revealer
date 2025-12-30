@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Debug log retention cap**: Automatically trims old debug log files to prevent indefinite growth
+  - On startup, keeps only the newest 30 log files in `%APPDATA%\rift-revealer\debug-logs`
+  - Implemented via `pruneDebugLogs()` function called after session header is written
+  - Configurable via `DEBUG_LOG_LIMIT` constant in [main.js](src/main.js)
+  - Newest log file is always preserved during pruning
+
 ## [1.8.0] - 2025-12-30
 
 ### Added

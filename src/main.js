@@ -14,6 +14,7 @@ const LCUConnector = require('./api/lcuConnector');
 const sessionTimestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5); // e.g., "2025-12-30T02-11-43"
 const debugLogsDir = path.join(app.getPath('userData'), 'debug-logs');
 const debugLogPath = path.join(debugLogsDir, `lobby-${sessionTimestamp}.log`);
+const DEBUG_LOG_LIMIT = 30;
 
 function debugLog(source, message, data = null) {
   const timestamp = new Date().toISOString();
@@ -24,6 +25,26 @@ function debugLog(source, message, data = null) {
 
   // Also log to console
   console.log(`[DEBUG-${source}] ${message}`, data || '');
+}
+
+function pruneDebugLogs(limit = DEBUG_LOG_LIMIT) {
+  try {
+    const logFiles = fs.readdirSync(debugLogsDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.log'))
+      .map((entry) => {
+        const fullPath = path.join(debugLogsDir, entry.name);
+        const stat = fs.statSync(fullPath);
+        return { path: fullPath, mtimeMs: stat.mtimeMs };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+    const staleFiles = logFiles.slice(limit);
+    for (const file of staleFiles) {
+      fs.unlinkSync(file.path);
+    }
+  } catch (error) {
+    console.error('[DebugLog] Failed to prune logs:', error);
+  }
 }
 
 // Initialize debug log on app start
@@ -43,6 +64,7 @@ try {
 
 `;
   fs.writeFileSync(debugLogPath, header, 'utf8');
+  pruneDebugLogs();
   console.log(`📝 Debug log file: ${debugLogPath}`);
 } catch (err) {
   console.error('Failed to initialize debug log:', err);
