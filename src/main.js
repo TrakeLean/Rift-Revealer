@@ -73,6 +73,11 @@ const userDataDir = path.join(app.getPath('appData'), 'rift-revealer');
 app.setPath('userData', userDataDir);
 console.log('User data path set to:', userDataDir);
 
+// Set App User Model ID for Windows taskbar icon (must match appId in package.json)
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.riftrevealer.app');
+}
+
 // Queue types that anonymize player names until game starts
 const ANONYMIZED_QUEUES = [420]; // Ranked Solo/Duo (allow Flex analysis in champ select)
 
