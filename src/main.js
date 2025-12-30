@@ -1752,6 +1752,18 @@ async function checkForUpdatesOnStartup() {
 ipcMain.handle('check-for-updates', async () => {
   try {
     const result = await updateChecker.checkForUpdates();
+
+    // If update is available, emit the update-available event to trigger the UpdateNotification popup
+    if (result.hasUpdate && mainWindow) {
+      mainWindow.webContents.send('update-available', {
+        hasUpdate: result.hasUpdate,
+        latestVersion: result.latestVersion,
+        currentVersion: result.currentVersion,
+        releaseNotes: result.releaseNotes,
+        releaseName: result.releaseName
+      });
+    }
+
     return {
       success: true,
       hasUpdate: result.hasUpdate,

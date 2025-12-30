@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Update notification changelog display**: Release notes now show full content with scrolling instead of truncating at 400 characters
+  - Removed character limit in UpdateNotification component
+  - Increased max height to 16rem for better visibility
+  - Users can now scroll through complete changelogs
+- **Manual update check popup**: "Check for Updates" button now triggers the UpdateNotification popup
+  - Previously only automatic startup checks showed the styled popup
+  - Manual checks now emit `update-available` event to display the same UI
+  - Consistent update notification experience across automatic and manual checks
+
 ## [1.8.1] - 2025-12-30
 
 ### Added

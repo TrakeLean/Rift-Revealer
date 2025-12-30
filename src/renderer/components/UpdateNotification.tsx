@@ -142,11 +142,10 @@ export function UpdateNotification() {
 
           {/* Release notes */}
           {updateInfo.releaseNotes && (
-            <div className="rounded-lg border border-border bg-card p-4 max-h-48 overflow-y-auto">
+            <div className="rounded-lg border border-border bg-card p-4 max-h-64 overflow-y-auto">
               <p className="text-sm text-muted-foreground font-semibold mb-2">What's New:</p>
               <div className="text-sm text-foreground whitespace-pre-wrap prose prose-invert prose-sm max-w-none">
-                {updateInfo.releaseNotes.slice(0, 400)}
-                {updateInfo.releaseNotes.length > 400 && '...'}
+                {updateInfo.releaseNotes}
               </div>
             </div>
           )}
