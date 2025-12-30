@@ -712,6 +712,9 @@ export function LobbyAnalysis() {
     const isSelected = expandedPlayer === playerKey
     const playerRank = playerRanks[player.puuid] ?? null
 
+    // Apply mode filter to stats
+    const filteredStats = getFilteredStats(player, selectedModes)
+
     // Check if this is an Arena match (queue ID 1700)
     const isArenaMatch = lastRoster?.queueId === 1700
     const hasPlacement = player.placement !== null && player.placement !== undefined
@@ -726,8 +729,8 @@ export function LobbyAnalysis() {
           wins={wins}
           losses={losses}
           tags={player.tags}
-          asEnemy={player.asEnemy || undefined}
-          asAlly={player.asAlly || undefined}
+          asEnemy={filteredStats.asEnemy || undefined}
+          asAlly={filteredStats.asAlly || undefined}
           threatLevel={player.threatLevel || undefined}
           allyQuality={player.allyQuality || undefined}
           lastSeen={player.lastSeen}
