@@ -857,9 +857,8 @@ function showPlayerDetectionNotification(analysis) {
         .join('');
 
       const notification = new Notification({
-        title: '🎮 Player Detected!',
+        title: 'Player Detected!',
         body: `${playerName}\nRecord: ${record} (${winRate}% WR)${tagText}${notesText}`,
-        icon: iconPath,
         silent: false
       });
 
@@ -881,9 +880,8 @@ function showPlayerDetectionNotification(analysis) {
       const moreText = filteredAnalysis.length > 3 ? `\n...and ${filteredAnalysis.length - 3} more` : '';
 
       const notification = new Notification({
-        title: `🎮 ${filteredAnalysis.length} Players Detected!`,
+        title: `${filteredAnalysis.length} Players Detected!`,
         body: `${playerList}${moreText}`,
-        icon: iconPath,
         silent: false
       });
 
@@ -1845,18 +1843,9 @@ ipcMain.handle('send-test-notification', async (event, data) => {
   try {
     console.log('[Test Notification] Creating notification...');
 
-    // Use icon.ico like the regular notifications
-    const iconPath = app.isPackaged
-      ? path.join(process.resourcesPath, 'icon.ico')
-      : path.join(__dirname, '../icon.ico');
-
-    console.log('[Test Notification] Icon path:', iconPath);
-    console.log('[Test Notification] Icon exists:', fs.existsSync(iconPath));
-
     const notification = new Notification({
-      title: '🎮 Test Notification',
+      title: 'Test Notification',
       body: 'This is how notifications will appear when you encounter tagged players in lobby.\n\nRecord: 15-8 (65% WR)\nTags: Toxic, Weak\n• Always flames in chat',
-      icon: iconPath,
       silent: false,
       timeoutType: 'default'
     });

@@ -115,8 +115,7 @@
           ]
         }
       ],
-      "icon": "icon.ico",
-      "signAndEditExecutable": false
+      "icon": "icon.ico"
     },
     "mac": {
       "target": [

@@ -36,9 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Previously the filter dropdown didn't update the displayed stats in player cards
   - Now applies selected mode filters to stats shown in Last Match Roster
 - **Windows taskbar icon**: Fixed taskbar showing default Electron icon in production builds
+  - Removed `signAndEditExecutable: false` from package.json which was preventing icon embedding
+  - electron-builder now properly embeds custom icon into the .exe file
   - Added `setAppUserModelId()` to properly associate app with its icon on Windows
-  - System tray icon was already working correctly
-  - Added debug logging for icon paths to help diagnose icon loading issues
+- **Notification icons**: Removed redundant icon parameter from notifications
+  - Windows already displays app icon automatically from system
+  - Cleaner notification appearance without duplicate icons
 
 ### Changed
 - **Product name formatting**: Changed from "RiftRevealer" to "Rift Revealer" (with space)

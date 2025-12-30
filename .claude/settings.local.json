@@ -78,7 +78,8 @@
       "Bash(npx:*)",
       "Bash(grep:*)",
       "Bash(export:*)",
-      "Bash(export RIOT_REGION=\"euw1\")"
+      "Bash(export RIOT_REGION=\"euw1\")",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []
