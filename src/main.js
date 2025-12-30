@@ -1842,18 +1842,42 @@ ipcMain.handle('update-notification-settings', async (event, settings) => {
 // Send test notification
 ipcMain.handle('send-test-notification', async (event, data) => {
   try {
+    console.log('[Test Notification] Creating notification...');
+
+    // Use icon.ico like the regular notifications
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'icon.ico')
+      : path.join(__dirname, '../icon.ico');
+
+    console.log('[Test Notification] Icon path:', iconPath);
+    console.log('[Test Notification] Icon exists:', fs.existsSync(iconPath));
+
     const notification = new Notification({
-      title: data.title || 'Rift Revealer',
-      body: data.body || 'Test notification',
-      icon: app.isPackaged
-        ? path.join(process.resourcesPath, 'logo.png')
-        : path.join(__dirname, '../logo.png')
+      title: '🎮 Test Notification',
+      body: 'This is how notifications will appear when you encounter tagged players in lobby.\n\nRecord: 15-8 (65% WR)\nTags: Toxic, Weak\n• Always flames in chat',
+      icon: iconPath,
+      silent: false,
+      timeoutType: 'default'
     });
 
+    notification.on('click', () => {
+      console.log('[Test Notification] Notification clicked');
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+
+    console.log('[Test Notification] Notification created, showing...');
     notification.show();
+    console.log('[Test Notification] Notification shown successfully');
+
+    // Also log to help debug
+    console.log('[Test Notification] Notification.isSupported():', Notification.isSupported());
+
     return { success: true };
   } catch (error) {
-    console.error('Failed to send test notification:', error);
+    console.error('[Test Notification] Failed to send test notification:', error);
     return { success: false, error: error.message };
   }
 });
