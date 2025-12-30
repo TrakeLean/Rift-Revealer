@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, protocol, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, protocol, Notification, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -162,7 +162,17 @@ function createTray() {
     ? path.join(process.resourcesPath, 'icon.ico')
     : path.join(__dirname, '../icon.ico');
 
-  tray = new Tray(iconPath);
+  console.log('[Tray] Icon path:', iconPath);
+  console.log('[Tray] Icon exists:', fs.existsSync(iconPath));
+
+  // Use nativeImage to ensure proper icon loading
+  const icon = nativeImage.createFromPath(iconPath);
+
+  if (icon.isEmpty()) {
+    console.error('[Tray] Failed to load icon from:', iconPath);
+  }
+
+  tray = new Tray(icon.isEmpty() ? iconPath : icon);
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -194,6 +204,11 @@ function createWindow() {
   const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, 'icon.ico')
     : path.join(__dirname, '../icon.ico');
+
+  console.log('[Window] Icon path:', iconPath);
+  console.log('[Window] Icon exists:', fs.existsSync(iconPath));
+  console.log('[Window] Is packaged:', app.isPackaged);
+  console.log('[Window] process.resourcesPath:', process.resourcesPath);
 
   mainWindow = new BrowserWindow({
     width: 1400,
