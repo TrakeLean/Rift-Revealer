@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Mode filter in Last Match Roster**: Player stats now update correctly when toggling game mode filters
   - Previously the filter dropdown didn't update the displayed stats in player cards
   - Now applies selected mode filters to stats shown in Last Match Roster
+- **Windows taskbar icon**: Fixed taskbar showing default Electron icon in production builds
+  - Added `setAppUserModelId()` to properly associate app with its icon on Windows
+  - System tray icon was already working correctly
+  - Added debug logging for icon paths to help diagnose icon loading issues
 
 ### Documentation
 - Added ARAM Mayhem API limitation to documentation
