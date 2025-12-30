@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Update notification consistency**: Manual "Check for Updates" now uses the same beautiful UpdateNotification popup as automatic checks
   - Previously used a basic confirm() dialog
   - Now shows styled popup with changelog, version comparison, and download button
+- **Mode filter in Last Match Roster**: Player stats now update correctly when toggling game mode filters
+  - Previously the filter dropdown didn't update the displayed stats in player cards
+  - Now applies selected mode filters to stats shown in Last Match Roster
 
 ### Documentation
 - Added ARAM Mayhem API limitation to documentation
