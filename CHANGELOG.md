@@ -5,6 +5,45 @@ All notable changes to Rift Revealer will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.5] - 2025-12-30
+
+### Fixed
+- **Duplicate player bug resolved**: Players no longer appear twice in lobby analysis UI
+  - Root cause: LCU API sends duplicate player entries (with and without PUUIDs) during ChampSelect
+  - Solution: Enhanced deduplication using database PUUID (`matchedPuuid`) instead of LCU PUUID
+  - Handles PUUID encryption differences between LCU API (unencrypted) and Riot Match API (encrypted per API key)
+  - Works correctly across name changes - same player tracked even after username/tag change
+
+### Added
+- **Comprehensive debug logging system**:
+  - Session-based log files with timestamps (e.g., `lobby-2025-12-30T12-34-56.log`)
+  - Logs saved to dedicated `debug-logs/` folder in app data directory
+  - Tracks LCU PUUID vs database PUUID mismatches for debugging
+  - Logs deduplication decisions (added vs skipped duplicates)
+  - Backend and frontend events logged with full context
+
+### Changed
+- Database lookup now returns `matchedPuuid` (the PUUID that actually found matches in database)
+- Deduplication logic enhanced to use both database PUUID and name-based fallback
+- Player tags now try database PUUID first, then LCU PUUID as fallback
+- Auto-import retry strategy improved: 6 attempts over 90 seconds (was 3 attempts over 25 seconds)
+- Auto-import now distinguishes between "already imported" vs "successfully imported new match"
+- Added ARAM Mayhem queue (2400) to queue name mapping
+- Queue name lookup now handles both string and number queue IDs
+
+### Technical Details
+- **PUUID Architecture**:
+  - LCU returns unencrypted UUIDs (e.g., `ab47b7c8-892b-5f7b-a154-54fc018bbf38`)
+  - Match API returns encrypted PUUIDs unique per API key (e.g., `O62OV7TIAInDkjD72coj0ov0KvRoNAg1UTnLojZBvNLZfGvhzstokAjFrWxBhrxSLFv-cuZgciLFEg`)
+  - Deduplication now uses database PUUID to handle this mismatch
+- **Files Updated**:
+  - `src/main.js`: Enhanced deduplication logic, debug logging, auto-import improvements
+  - `src/database/db.js`: Returns `matchedPuuid` from `getPlayerHistory()`
+  - `src/preload.js`: Added `debugLog` IPC handler
+  - `src/renderer/pages/LobbyAnalysis.tsx`: Frontend debug logging
+- **Race Condition Fixes**: Added mutex (`analysisInProgress`) to prevent concurrent lobby analyses
+- **Memory Leak Fixes**: Proper cleanup of intervals in `startGameflowMonitor()` and `stop-auto-monitor`
+
 ## [1.7.4] - 2025-12-07
 
 ### Changed

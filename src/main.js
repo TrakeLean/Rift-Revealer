@@ -8,6 +8,45 @@ const Database = require('./database/db');
 const { formatRiotId, parseRiotId } = require('./database/db');
 const RiotAPI = require('./api/riotApi');
 const LCUConnector = require('./api/lcuConnector');
+
+// Debug logger - writes timestamped logs to file for debugging
+// Create unique log file per session with timestamp in a dedicated debug-logs folder
+const sessionTimestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5); // e.g., "2025-12-30T02-11-43"
+const debugLogsDir = path.join(app.getPath('userData'), 'debug-logs');
+const debugLogPath = path.join(debugLogsDir, `lobby-${sessionTimestamp}.log`);
+
+function debugLog(source, message, data = null) {
+  const timestamp = new Date().toISOString();
+  const logLine = `[${timestamp}] [${source}] ${message}${data ? '\n  Data: ' + JSON.stringify(data, null, 2) : ''}\n`;
+
+  // Write to file (append)
+  fs.appendFileSync(debugLogPath, logLine, 'utf8');
+
+  // Also log to console
+  console.log(`[DEBUG-${source}] ${message}`, data || '');
+}
+
+// Initialize debug log on app start
+try {
+  // Create debug-logs directory if it doesn't exist
+  if (!fs.existsSync(debugLogsDir)) {
+    fs.mkdirSync(debugLogsDir, { recursive: true });
+    console.log('Created debug-logs directory');
+  }
+
+  const header = `
+================================================================================
+  Debug Log Session: ${new Date().toISOString()}
+  App Version: ${app.getVersion()}
+  Platform: ${process.platform}
+================================================================================
+
+`;
+  fs.writeFileSync(debugLogPath, header, 'utf8');
+  console.log(`📝 Debug log file: ${debugLogPath}`);
+} catch (err) {
+  console.error('Failed to initialize debug log:', err);
+}
 const UpdateChecker = require('./api/updateChecker');
 
 let mainWindow;
@@ -26,6 +65,8 @@ autoUpdater.autoInstallOnAppQuit = true;
 let currentGameflowState = null;
 let lastAnalyzedPlayers = null;
 let gameImported = false; // Track if we've imported the current game
+let needsFinalAnalysis = false; // Track if we need to do the InProgress re-analysis
+let analysisInProgress = false; // Mutex to prevent concurrent analyses
 
 // Force a consistent userData path so dev/prod share the same DB/cache
 const userDataDir = path.join(app.getPath('appData'), 'rift-revealer');
@@ -54,6 +95,7 @@ const QUEUE_NAMES = {
   1400: 'Ultimate Spellbook',
   1700: 'Arena',
   1900: 'Pick URF',
+  2400: 'ARAM Mayhem',
   3140: 'Practice Tool'
 };
 
@@ -107,7 +149,11 @@ async function getSkinImagePath(skinId, championName) {
 
 // Helper to get queue name
 function getQueueName(queueId) {
-  return QUEUE_NAMES[queueId] || `Queue ${queueId}`;
+  if (queueId === undefined || queueId === null) return 'Unknown Queue';
+  // Normalize to number since queueId might come as string from API
+  const normalizedId = Number(typeof queueId === 'string' ? queueId.trim() : queueId);
+  const fallbackKey = typeof queueId === 'string' ? queueId.trim() : String(queueId);
+  return QUEUE_NAMES[normalizedId] || QUEUE_NAMES[fallbackKey] || `Queue ${queueId}`;
 }
 
 function createTray() {
@@ -377,10 +423,18 @@ app.whenReady().then(() => {
   });
 
   app.on('before-quit', () => {
-    // Clean up auto-monitor interval
+    // Clean up auto-monitor interval and all state
     if (autoMonitorInterval) {
+      console.log('App quitting - cleaning up gameflow monitor...');
       clearInterval(autoMonitorInterval);
       autoMonitorInterval = null;
+
+      // Reset all state machine variables
+      currentGameflowState = null;
+      lastAnalyzedPlayers = null;
+      gameImported = false;
+      needsFinalAnalysis = false;
+      analysisInProgress = false;
       lastLobbyHash = null;
     }
   });
@@ -407,6 +461,10 @@ ipcMain.handle('window-close', () => {
 
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
+});
+
+ipcMain.handle('debug-log-frontend', (event, message, data) => {
+  debugLog('FRONTEND', message, data);
 });
 
 ipcMain.handle('get-user-config', async () => {
@@ -827,13 +885,39 @@ function showPlayerDetectionNotification(analysis) {
 
 // Helper function to analyze lobby players
 async function analyzeLobbyPlayers(lobbyPlayers) {
+  debugLog('BACKEND', '>>> analyzeLobbyPlayers() CALLED', {
+    playerCount: lobbyPlayers.length,
+    analysisInProgress: analysisInProgress,
+    players: lobbyPlayers.map(p => ({
+      name: formatRiotId(p.username, p.tagLine),
+      puuid: p.puuid,
+      source: p.source
+    })),
+    stackTrace: new Error().stack.split('\n').slice(1, 4).join('\n')
+  });
+
   const config = db.getUserConfig();
   if (!config || !config.username) {
     console.log('⚠️  Cannot analyze: No user configuration found. Please configure your summoner name in Settings.');
+    debugLog('BACKEND', 'Analysis aborted - no user config');
     return;
   }
 
   console.log(`[Backend] Analyzing ${lobbyPlayers.length} players from LCU`);
+
+  // Check if lobbyPlayers already has duplicates
+  const playerKeys = lobbyPlayers.map(p => formatRiotId(p.username, p.tagLine));
+  const uniqueKeys = new Set(playerKeys);
+  if (playerKeys.length !== uniqueKeys.size) {
+    console.warn(`⚠️ [INPUT] DUPLICATES IN lobbyPlayers FROM LCU!`);
+    console.warn(`  Total: ${playerKeys.length}, Unique: ${uniqueKeys.size}`);
+    console.warn(`  Players:`, playerKeys);
+    debugLog('BACKEND', '⚠️ DUPLICATES IN INPUT lobbyPlayers!', {
+      total: playerKeys.length,
+      unique: uniqueKeys.size,
+      players: playerKeys
+    });
+  }
 
   // Cache live skin selections so match imports can persist skin IDs
   if (db?.setLiveSkinSelections) {
@@ -849,9 +933,25 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
     }
     console.log(`Checking history for: ${formatRiotId(player.username, player.tagLine)}`);
     console.log(`  Player data: username="${player.username}", tagLine="${player.tagLine}", puuid="${player.puuid}"`);
+
+    debugLog('BACKEND', `🔍 Looking up player history`, {
+      name: formatRiotId(player.username, player.tagLine),
+      lcuPuuid: player.puuid,
+      source: player.source
+    });
+
     // Prefer PUUID (more reliable) and fall back to name matching
     const history = db.getPlayerHistory(player.username, player.tagLine, player.puuid || null);
     console.log(`  Found ${history.games.length} games with stats:`, history.stats ? 'YES' : 'NO');
+
+    debugLog('BACKEND', `📊 History lookup result`, {
+      name: formatRiotId(player.username, player.tagLine),
+      lcuPuuid: player.puuid,
+      matchedPuuid: history.matchedPuuid,
+      puuidMismatch: player.puuid && history.matchedPuuid && player.puuid !== history.matchedPuuid,
+      gamesFound: history.games.length,
+      hasStats: !!history.stats
+    });
     // Persist latest cosmetics (skip if unknown/anonymized player)
     if (player.puuid && player.username && player.tagLine) {
       try {
@@ -882,8 +982,10 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
         isAlly: g.user_team === g.opponent_team
       }));
 
-      // Get player tags
-      const tags = player.puuid ? db.getPlayerTags(player.puuid) : [];
+      // Get player tags - try matchedPuuid first (database PUUID), fallback to LCU PUUID
+      const tags = (history.matchedPuuid && db.getPlayerTags(history.matchedPuuid)) ||
+                   (player.puuid && db.getPlayerTags(player.puuid)) ||
+                   [];
 
       // Get championName - try from player, then from last seen, or lookup in DB from championId
       let championName = player.championName || history.stats.enhanced.lastSeen?.champion || null;
@@ -901,7 +1003,8 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
       analysis.push({
         username: player.username,
         tagLine: player.tagLine,
-        puuid: player.puuid,
+        puuid: player.puuid, // LCU PUUID (may differ from database)
+        matchedPuuid: history.matchedPuuid, // Database PUUID (for deduplication)
         source: player.source,
         encounterCount: history.stats.totalGames,
         wins: history.stats.asEnemy.wins + history.stats.asTeammate.wins,
@@ -924,35 +1027,117 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
     }
   }
 
-  console.log(`Total players with history: ${analysis.length}`);
+  console.log(`Total players with history (before deduplication): ${analysis.length}`);
+
+  // Log the raw analysis array to debug duplicates
+  if (analysis.length > 0) {
+    const playerNames = analysis.map(p => formatRiotId(p.username, p.tagLine));
+    console.log(`  Players found:`, playerNames);
+  }
 
   if (analysis.length === 0) {
     console.log('ℹ️  No players from your match history found in this lobby');
     console.log('   Make sure you have imported your match history from the Match History page');
   }
 
-  // Send update to renderer
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    console.log('📤 Sending lobby-update event to renderer with', analysis.length, 'players');
+  // Deduplicate analysis array before sending
+  // Use BOTH matchedPuuid AND username#tagLine for deduplication
+  // This handles:
+  //  1. Same player with different LCU vs Match API PUUIDs (dedupe by matchedPuuid)
+  //  2. Same player with different usernames (name change - dedupe by matchedPuuid)
+  //  3. Different players with missing PUUIDs (dedupe by name as fallback)
+  const deduplicatedAnalysis = [];
+  const seenPuuids = new Set(); // Track by database PUUID (matchedPuuid)
+  const seenNames = new Set();  // Track by username#tagLine (fallback for players without matchedPuuid)
 
-    // Check for duplicates before sending
-    const playerKeys = analysis.map(p => formatRiotId(p.username, p.tagLine));
-    const uniqueKeys = new Set(playerKeys);
-    if (playerKeys.length !== uniqueKeys.size) {
-      console.error(`⚠️ [SEND] DUPLICATES IN ANALYSIS ARRAY!`);
-      console.error(`  Total: ${playerKeys.length}, Unique: ${uniqueKeys.size}`);
-      console.error(`  Players:`, playerKeys);
+  debugLog('BACKEND', '🔄 Starting deduplication', {
+    totalBeforeDedup: analysis.length,
+    players: analysis.map(p => ({
+      name: formatRiotId(p.username, p.tagLine),
+      lcuPuuid: p.puuid,
+      matchedPuuid: p.matchedPuuid
+    }))
+  });
+
+  for (const player of analysis) {
+    const playerName = formatRiotId(player.username, player.tagLine);
+    let isDuplicate = false;
+    let dedupReason = null;
+
+    // Check 1: If we have a matchedPuuid (database PUUID), use it as primary unique key
+    if (player.matchedPuuid) {
+      if (seenPuuids.has(player.matchedPuuid)) {
+        isDuplicate = true;
+        dedupReason = 'matchedPuuid already seen';
+      } else {
+        seenPuuids.add(player.matchedPuuid);
+        // Also track by name to catch edge cases
+        seenNames.add(playerName);
+      }
+    }
+    // Check 2: Fallback to name-based deduplication (for players without matchedPuuid)
+    else {
+      if (seenNames.has(playerName)) {
+        isDuplicate = true;
+        dedupReason = 'name already seen (no matchedPuuid)';
+      } else {
+        seenNames.add(playerName);
+      }
     }
 
-    console.log(`[Backend] Found ${analysis.length} players with history`);
+    if (!isDuplicate) {
+      deduplicatedAnalysis.push(player);
+      debugLog('BACKEND', `✅ Adding player to analysis`, {
+        name: playerName,
+        lcuPuuid: player.puuid,
+        matchedPuuid: player.matchedPuuid,
+        uniqueBy: player.matchedPuuid ? 'matchedPuuid' : 'name'
+      });
+    } else {
+      console.log(`⚠️ Skipping duplicate player: ${playerName} (${dedupReason})`);
+      debugLog('BACKEND', `⚠️ SKIPPING DUPLICATE`, {
+        name: playerName,
+        lcuPuuid: player.puuid,
+        matchedPuuid: player.matchedPuuid,
+        reason: dedupReason
+      });
+    }
+  }
+
+  debugLog('BACKEND', '✅ Deduplication complete', {
+    totalAfterDedup: deduplicatedAnalysis.length,
+    removed: analysis.length - deduplicatedAnalysis.length
+  });
+
+  // Send update to renderer
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    console.log('📤 Sending lobby-update event to renderer with', deduplicatedAnalysis.length, 'players');
+
+    // Check for duplicates in final array (should be none after deduplication)
+    const playerKeys = deduplicatedAnalysis.map(p => formatRiotId(p.username, p.tagLine));
+    const uniqueKeys = new Set(playerKeys);
+    if (playerKeys.length !== uniqueKeys.size) {
+      console.error(`⚠️ [SEND] DUPLICATES IN ANALYSIS ARRAY AFTER DEDUPLICATION!`);
+      console.error(`  Total: ${playerKeys.length}, Unique: ${uniqueKeys.size}`);
+      console.error(`  Players:`, playerKeys);
+      debugLog('BACKEND', 'DUPLICATES DETECTED AFTER DEDUP!', { total: playerKeys.length, unique: uniqueKeys.size, players: playerKeys });
+    }
+
+    console.log(`[Backend] Found ${deduplicatedAnalysis.length} players with history`);
+
+    debugLog('BACKEND', '📤 Sending lobby-update to frontend', {
+      playerCount: deduplicatedAnalysis.length,
+      players: playerKeys
+    });
+
     mainWindow.webContents.send('lobby-update', {
       success: true,
-      data: { analysis }
+      data: { analysis: deduplicatedAnalysis }
     });
 
     // Show notification if window is not focused and players detected
-    if (analysis.length > 0 && (!mainWindow.isFocused() || mainWindow.isMinimized())) {
-      showPlayerDetectionNotification(analysis);
+    if (deduplicatedAnalysis.length > 0 && (!mainWindow.isFocused() || mainWindow.isMinimized())) {
+      showPlayerDetectionNotification(deduplicatedAnalysis);
     }
   } else {
     console.log('⚠️  Cannot send lobby-update: mainWindow not ready');
@@ -963,9 +1148,11 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
 
 // Function to start gameflow monitoring
 async function startGameflowMonitor() {
+  // Always clean up existing monitor before starting a new one
   if (autoMonitorInterval) {
-    console.log('Gameflow monitor already running');
-    return { success: true, message: 'Already monitoring' };
+    console.log('Stopping existing gameflow monitor before starting new one...');
+    clearInterval(autoMonitorInterval);
+    autoMonitorInterval = null;
   }
 
   console.log('Starting gameflow monitor...');
@@ -1040,6 +1227,8 @@ async function startGameflowMonitor() {
           // Waiting for champion select - clear any previous analysis
           lastAnalyzedPlayers = null;
           gameImported = false; // Reset import flag when entering new lobby
+          needsFinalAnalysis = false; // Reset final analysis flag for new lobby
+          analysisInProgress = false; // Reset mutex for new lobby
           if (mainWindow && !mainWindow.isDestroyed()) {
             const queueId = gameflowSession?.queue?.id || gameflowSession?.gameData?.queue?.id || 0;
             const queueName = getQueueName(queueId);
@@ -1069,15 +1258,25 @@ async function startGameflowMonitor() {
           const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
           const hasIdentifiablePlayers = lobbyPlayers.some(p => p.puuid || (p.username && p.tagLine));
 
-          if (hasIdentifiablePlayers && playerHash !== lastAnalyzedPlayers) {
+          if (hasIdentifiablePlayers && playerHash !== lastAnalyzedPlayers && !analysisInProgress) {
             // Clear cache on first analysis of a new lobby
             if (!lastAnalyzedPlayers && db?.setLiveSkinSelections) {
               db.setLiveSkinSelections([], true); // clearFirst=true for new lobby
               console.log('  [Skin Cache] Cleared for new ChampSelect lobby');
             }
+
+            analysisInProgress = true; // Acquire lock
             lastAnalyzedPlayers = playerHash;
+            needsFinalAnalysis = true; // Mark that we need to re-analyze in InProgress
             console.log(`=== ANALYZING LOBBY (ChampSelect - ${queueName}) ===`);
-            await analyzeLobbyPlayers(lobbyPlayers);
+
+            try {
+              await analyzeLobbyPlayers(lobbyPlayers);
+            } finally {
+              analysisInProgress = false; // Always release lock
+            }
+          } else if (analysisInProgress) {
+            console.log(`  ChampSelect: Skipping analysis - already in progress`);
           }
 
           if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1101,16 +1300,31 @@ async function startGameflowMonitor() {
           const lobbyPlayers = await lcuConnector.getLobbyPlayers();
           const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
 
-          // Only re-analyze if players changed OR if we haven't analyzed yet
-          if (!lastAnalyzedPlayers || playerHash !== lastAnalyzedPlayers) {
-            console.log('=== ANALYZING LOBBY (InProgress) ===');
+          // Re-analyze if: (1) we haven't analyzed yet, OR (2) we did ChampSelect analysis and need final data
+          if ((!lastAnalyzedPlayers || needsFinalAnalysis) && !analysisInProgress) {
+            console.log('=== ANALYZING LOBBY (InProgress - Final Champion/Skin Data) ===');
+            console.log(`  Reason: ${!lastAnalyzedPlayers ? 'First analysis' : 'Capturing locked champions/skins after ChampSelect'}`);
+
+            analysisInProgress = true; // Acquire lock
+
             // Clear and refresh cache with actual champion/skin data
             if (db?.setLiveSkinSelections) {
               db.setLiveSkinSelections([], true); // clearFirst=true
               console.log('  [Skin Cache] Cleared for InProgress game');
             }
+
             lastAnalyzedPlayers = playerHash;
-            await analyzeLobbyPlayers(lobbyPlayers);
+            needsFinalAnalysis = false; // Reset flag after final analysis
+
+            try {
+              await analyzeLobbyPlayers(lobbyPlayers);
+            } finally {
+              analysisInProgress = false; // Always release lock
+            }
+          } else if (analysisInProgress) {
+            console.log('  InProgress: Skipping analysis - already in progress');
+          } else {
+            console.log('  InProgress: Already have final analysis - skipping');
           }
 
           if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1149,44 +1363,67 @@ async function startGameflowMonitor() {
                 const lastKnownMatch = db.db.prepare('SELECT match_id FROM matches ORDER BY game_creation DESC LIMIT 1').get();
                 const lastKnownMatchId = lastKnownMatch?.match_id || null;
 
-                // Wait 10 seconds for Riot to process the game
-                await new Promise(resolve => setTimeout(resolve, 10000));
-
                 console.log('Importing completed game...');
-                // Pull a small window (latest 3) to avoid reusing an already-imported match
-                let result = await riotApi.importMatchHistory(config.puuid, config.region, 3);
+                console.log(`  Last known match in DB: ${lastKnownMatchId || 'none'}`);
 
-                // If nothing new imported (likely API delay), retry once after a short wait
-                if (result === 0) {
-                  console.log('No new matches imported. Retrying once after 10s...');
-                  await new Promise(resolve => setTimeout(resolve, 10000));
-                  result = await riotApi.importMatchHistory(config.puuid, config.region, 3);
-                }
+                let result = 0;
+                const maxRetries = 6; // Try up to 6 times over ~90 seconds
+                const retryDelays = [10000, 10000, 15000, 15000, 20000, 20000]; // Progressive delays in ms
 
-                // If the newest match ID did not change, perform one final fetch after a short delay
-                const latestAfterImport = db.db.prepare('SELECT match_id FROM matches ORDER BY game_creation DESC LIMIT 1').get();
-                const latestMatchId = latestAfterImport?.match_id || null;
-                if (lastKnownMatchId && latestMatchId === lastKnownMatchId) {
-                  console.log('Latest match ID unchanged after import. Retrying fetch after 5s...');
-                  await new Promise(resolve => setTimeout(resolve, 5000));
-                  result = await riotApi.importMatchHistory(config.puuid, config.region, 3);
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                  // Wait before each attempt (Riot API can be slow)
+                  console.log(`  Attempt ${attempt + 1}/${maxRetries}: Waiting ${retryDelays[attempt] / 1000}s for Riot API...`);
+                  await new Promise(resolve => setTimeout(resolve, retryDelays[attempt]));
+
+                  // Try to import latest matches
+                  const imported = await riotApi.importMatchHistory(config.puuid, config.region, 3);
+
+                  if (imported > 0) {
+                    // Successfully imported new match(es)
+                    result = imported;
+                    console.log(`  ✅ Successfully imported ${imported} new match(es) on attempt ${attempt + 1}`);
+                    break;
+                  }
+
+                  // Check if database was updated (match might have been imported by another process)
+                  const currentLatest = db.db.prepare('SELECT match_id FROM matches ORDER BY game_creation DESC LIMIT 1').get();
+                  if (currentLatest?.match_id !== lastKnownMatchId) {
+                    console.log(`  ✅ Match appeared in database (imported elsewhere)`);
+                    result = 1; // Count as success even though we didn't import it
+                    break;
+                  }
+
+                  if (attempt < maxRetries - 1) {
+                    console.log(`  No new matches yet, retrying...`);
+                  } else {
+                    console.log(`  ⚠️  Gave up after ${maxRetries} attempts. Riot API may be delayed.`);
+                  }
                 }
 
                 if (mainWindow && !mainWindow.isDestroyed()) {
+                  const message = result > 0
+                    ? `Game imported! (${result} new match${result !== 1 ? 'es' : ''})`
+                    : 'Match already in database (imported earlier)';
+
                   mainWindow.webContents.send('gameflow-status', {
                     state: 'EndOfGame',
-                    message: `Game imported! (${result} matches)`,
+                    message: message,
                     canAnalyze: false
                   });
 
                   // Notify user
                   mainWindow.webContents.send('game-auto-imported', {
                     success: true,
-                    imported: result
+                    imported: result,
+                    alreadyImported: result === 0
                   });
                 }
 
-                console.log(`✅ Auto-imported ${result} match(es)`);
+                if (result > 0) {
+                  console.log(`✅ Auto-imported ${result} new match(es)`);
+                } else {
+                  console.log(`ℹ️  Match already in database (likely imported earlier)`);
+                }
               }
             } catch (error) {
               console.error('Auto-import failed:', error.message);
@@ -1200,6 +1437,7 @@ async function startGameflowMonitor() {
             }
 
             lastAnalyzedPlayers = null;
+            needsFinalAnalysis = false;
           } else {
             // Already imported - just show status
             if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1216,7 +1454,9 @@ async function startGameflowMonitor() {
           // Player needs to reconnect to game - try to analyze if we haven't
           console.log('=== RECONNECT STATE ===');
 
-          if (!lastAnalyzedPlayers) {
+          if (!lastAnalyzedPlayers && !analysisInProgress) {
+            analysisInProgress = true; // Acquire lock
+
             try {
               // Clear cache for new game
               if (db?.setLiveSkinSelections) {
@@ -1226,11 +1466,16 @@ async function startGameflowMonitor() {
               const lobbyPlayers = await lcuConnector.getLobbyPlayers();
               const playerHash = JSON.stringify(lobbyPlayers.map(p => p.puuid || formatRiotId(p.username, p.tagLine)).sort());
               lastAnalyzedPlayers = playerHash;
+              needsFinalAnalysis = false; // Mark as complete (this IS the final analysis)
               console.log('=== ANALYZING LOBBY (Reconnect) ===');
               await analyzeLobbyPlayers(lobbyPlayers);
             } catch (error) {
               console.error('Failed to analyze during reconnect:', error.message);
+            } finally {
+              analysisInProgress = false; // Always release lock
             }
+          } else if (analysisInProgress) {
+            console.log('  Reconnect: Skipping analysis - already in progress');
           }
 
           if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1238,6 +1483,21 @@ async function startGameflowMonitor() {
               state: 'Reconnect',
               message: 'Reconnecting to game - analysis available',
               canAnalyze: true
+            });
+          }
+          break;
+
+        default:
+          // Handle unknown/unexpected gameflow states
+          console.warn(`⚠️  Unknown gameflow state detected: "${currentGameflowState}"`);
+          console.warn('  This may be a new game mode or LCU API change. Please report this.');
+
+          // Send status update so UI doesn't get stuck
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('gameflow-status', {
+              state: currentGameflowState || 'Unknown',
+              message: `Unknown state: ${currentGameflowState || 'null'}. Monitoring continues.`,
+              canAnalyze: false
             });
           }
           break;
@@ -1269,9 +1529,16 @@ ipcMain.handle('start-auto-monitor', async () => {
 
 ipcMain.handle('stop-auto-monitor', async () => {
   if (autoMonitorInterval) {
+    console.log('Stopping gameflow monitor and resetting all state...');
     clearInterval(autoMonitorInterval);
     autoMonitorInterval = null;
+
+    // Reset all state machine variables to prevent stale data
+    currentGameflowState = null;
     lastAnalyzedPlayers = null;
+    gameImported = false;
+    needsFinalAnalysis = false;
+    analysisInProgress = false;
   }
   return { success: true, message: 'Auto-monitoring stopped' };
 });

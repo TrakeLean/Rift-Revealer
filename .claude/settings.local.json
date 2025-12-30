@@ -72,7 +72,11 @@
       "Bash(ls:*)",
       "Bash(xargs kill -9)",
       "Bash(lsof:*)",
-      "Bash(timeout /t 2 /nobreak)"
+      "Bash(timeout /t 2 /nobreak)",
+      "Bash(npm run start)",
+      "Bash(pkill:*)",
+      "Bash(npx:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

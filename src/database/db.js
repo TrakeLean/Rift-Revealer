@@ -511,6 +511,7 @@ class DatabaseManager {
 
     // Always start with an empty list; we'll fill it with the first successful query
     let games = [];
+    let matchedPuuid = null; // Track which PUUID actually matched
 
     // Priority 1: Match by PUUID if available (most reliable)
     if (puuid) {
@@ -530,6 +531,7 @@ class DatabaseManager {
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
           opponent.placement as opponent_placement,
+          opponent.puuid as opponent_puuid,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
@@ -546,9 +548,12 @@ class DatabaseManager {
       `);
 
       games = gamesStmt.all(config.puuid, puuid, config.puuid);
+      if (games.length > 0) {
+        matchedPuuid = puuid;
+      }
     }
 
-    // Priority 2: Fallback to name matching (PUUIDs can occasionally differ between LCU and Match API)
+    // Priority 2: Fallback to name matching (PUUIDs can differ between LCU and Match API, or player changed name)
     if ((!games || games.length === 0) && username) {
       console.log(`  DB Query: Searching for "${username}#${tagLine || ''}" (PUUID lookup empty)`);
 
@@ -577,6 +582,7 @@ class DatabaseManager {
           opponent.win as opponent_win,
           opponent.team_id as opponent_team,
           opponent.placement as opponent_placement,
+          opponent.puuid as opponent_puuid,
           user.champion_name as user_champion,
           user.kills as user_kills,
           user.deaths as user_deaths,
@@ -604,10 +610,16 @@ class DatabaseManager {
       params.push(config.puuid);
 
       games = gamesStmt.all(...params);
+
+      // If we found games by name, use the database PUUID for deduplication
+      if (games.length > 0) {
+        matchedPuuid = games[0].opponent_puuid;
+        console.log(`  ✅ Found ${games.length} games by name - using database PUUID: ${matchedPuuid}`);
+      }
     }
 
     if (games.length === 0) {
-      return { games: [], stats: null };
+      return { games: [], stats: null, matchedPuuid: null };
     }
 
     // Group games by queue category
@@ -835,6 +847,7 @@ class DatabaseManager {
 
     return {
       games,
+      matchedPuuid, // Return the PUUID that actually matched in the database (for deduplication)
       stats: {
         totalGames: games.length,
         asTeammate: {

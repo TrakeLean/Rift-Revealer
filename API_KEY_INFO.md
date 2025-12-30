@@ -106,4 +106,57 @@ To minimize API calls and avoid rate limits:
 
 ---
 
-**Last Updated:** 2025-12-04 20:35
+## PUUID Encryption (Important!)
+
+### The Problem
+Riot API encrypts PUUIDs differently per API key, but the LCU (League Client Update) API returns unencrypted PUUIDs. This creates a mismatch:
+
+- **LCU API** (localhost): Returns **unencrypted** UUIDs
+  - Format: `ab47b7c8-892b-5f7b-a154-54fc018bbf38` (standard UUID)
+  - Always the same for a given player
+
+- **Riot Match API**: Returns **encrypted** PUUIDs
+  - Format: `O62OV7TIAInDkjD72coj0ov0KvRoNAg1UTnLojZBvNLZfGvhzstokAjFrWxBhrxSLFv-cuZgciLFEg` (Base64-like)
+  - **Unique per API key** - same player has different encrypted PUUID for each developer
+
+### Impact on This App
+
+**Database stores encrypted PUUIDs** from match imports (Match API)
+**Lobby detection uses unencrypted PUUIDs** from LCU
+
+This means:
+- ✅ **Name-based fallback is essential** - `getPlayerHistory()` tries PUUID first, falls back to username#tagLine
+- ⚠️ **Switching API keys breaks PUUID lookups** - When you switch from dev key to production key:
+  - All encrypted PUUIDs in database become invalid
+  - Must clear database and re-import match history
+  - OR rely on name-based matching (works but slower)
+
+### Development Key → Production Key Migration
+
+When you get a production API key, you have two options:
+
+**Option 1: Clear & Re-import (Recommended)**
+1. Delete database: `C:\Users\{Username}\AppData\Roaming\rift-revealer\database\`
+2. Update API key in app Settings
+3. Re-import match history with new key
+4. All PUUIDs will be encrypted with production key
+
+**Option 2: Keep Dev Database (Fallback to Names)**
+1. Update API key in app Settings
+2. Keep existing database
+3. App will fallback to username#tagLine matching
+4. Slower lookups, but no data loss
+
+### Why This Matters
+
+- **Deduplication:** App uses database PUUID (`matchedPuuid`) for deduplication, not LCU PUUID
+- **Name Changes:** If player changes name, PUUID matching still works (if using same API key)
+- **Cross-Developer:** Same player appears as different PUUID to different developers
+
+### References
+- [Riot PUUID Documentation](https://www.riotgames.com/en/DevRel/player-universally-unique-identifiers-and-a-new-security-layer)
+- [LCU API Docs](https://riot-api-libraries.readthedocs.io/en/latest/lcu.html)
+
+---
+
+**Last Updated:** 2025-12-30

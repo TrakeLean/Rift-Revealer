@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('api', {
   windowMaximize: () => ipcRenderer.invoke('window-maximize'),
   windowClose: () => ipcRenderer.invoke('window-close'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  debugLog: (message, data) => ipcRenderer.invoke('debug-log-frontend', message, data),
 
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

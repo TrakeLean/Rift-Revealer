@@ -447,10 +447,17 @@ export function LobbyAnalysis() {
     // Listen for auto-import notifications
     const cleanupAutoImport = window.api.onGameAutoImported((data) => {
       if (data.success) {
-        setStatus({
-          message: `Game auto-imported! Added ${data.imported} match(es) to your history.`,
-          type: 'success'
-        })
+        if (data.alreadyImported) {
+          setStatus({
+            message: 'Match already in your history (imported earlier).',
+            type: 'info'
+          })
+        } else {
+          setStatus({
+            message: `Game auto-imported! Added ${data.imported} match${data.imported !== 1 ? 'es' : ''} to your history.`,
+            type: 'success'
+          })
+        }
         // Refresh last roster so the just-finished game shows up
         loadLastRoster()
       }
@@ -461,6 +468,13 @@ export function LobbyAnalysis() {
       if (data.success && data.data) {
         const players = data.data.analysis || []
         console.log(`[Frontend] Received ${players.length} players with history`)
+
+        // Debug log to file
+        window.api.debugLog('📥 Received lobby-update event', {
+          playerCount: players.length,
+          players: players.map(p => `${p.username}#${p.tagLine}`),
+          currentDetectedPlayersCount: detectedPlayers.length
+        })
 
         setDetectedPlayers(players)
         cachedDetectedPlayers = players
