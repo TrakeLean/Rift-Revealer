@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Test Notification button**: Added button in Settings to preview desktop notifications
+  - Located in the Notifications section below tag filters
+  - Shows a sample notification with app icon and example message
+  - Helps users verify notification settings are working correctly
+
 ### Fixed
 - **Update notification consistency**: Manual "Check for Updates" now uses the same beautiful UpdateNotification popup as automatic checks
   - Previously used a basic confirm() dialog
