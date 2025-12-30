@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - "Skip This Version" button in update notification dialog to skip specific versions
   - Skipped versions won't show notifications until a newer version is released
   - Manual "Check for Updates" always shows popup regardless of skip setting
+  - Clicking "Download Update" clears the skip flag, allowing download of previously skipped versions
   - All preferences persist in database
 
 ## [1.8.2] - 2025-12-30

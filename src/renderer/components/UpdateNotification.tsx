@@ -68,6 +68,11 @@ export function UpdateNotification() {
     setIsDownloading(true)
     setError(null)
     try {
+      // Clear any skipped version since user is now choosing to download
+      if (updateInfo) {
+        await window.api.skipUpdateVersion(null)
+      }
+
       const result = await window.api.downloadUpdate()
       if (!result.success) {
         setError(result.error || 'Failed to start download')
