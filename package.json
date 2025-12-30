@@ -60,7 +60,7 @@
   },
   "build": {
     "appId": "com.riftrevealer.app",
-    "productName": "RiftRevealer",
+    "productName": "Rift Revealer",
     "publish": {
       "provider": "github",
       "owner": "TrakeLean",
