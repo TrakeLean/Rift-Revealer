@@ -941,10 +941,11 @@ function showPlayerDetectionNotification(analysis) {
 }
 
 // Helper function to analyze lobby players
-async function analyzeLobbyPlayers(lobbyPlayers) {
+async function analyzeLobbyPlayers(lobbyPlayers, showNotification = true) {
   debugLog('BACKEND', '>>> analyzeLobbyPlayers() CALLED', {
     playerCount: lobbyPlayers.length,
     analysisInProgress: analysisInProgress,
+    showNotification: showNotification,
     players: lobbyPlayers.map(p => ({
       name: formatRiotId(p.username, p.tagLine),
       puuid: p.puuid,
@@ -1192,8 +1193,8 @@ async function analyzeLobbyPlayers(lobbyPlayers) {
       data: { analysis: deduplicatedAnalysis }
     });
 
-    // Show notification if window is not focused and players detected
-    if (deduplicatedAnalysis.length > 0 && (!mainWindow.isFocused() || mainWindow.isMinimized())) {
+    // Show notification if enabled, window is not focused, and players detected
+    if (showNotification && deduplicatedAnalysis.length > 0 && (!mainWindow.isFocused() || mainWindow.isMinimized())) {
       showPlayerDetectionNotification(deduplicatedAnalysis);
     }
   } else {
@@ -1328,7 +1329,7 @@ async function startGameflowMonitor() {
             console.log(`=== ANALYZING LOBBY (ChampSelect - ${queueName}) ===`);
 
             try {
-              await analyzeLobbyPlayers(lobbyPlayers);
+              await analyzeLobbyPlayers(lobbyPlayers, false); // Don't notify in ChampSelect
             } finally {
               analysisInProgress = false; // Always release lock
             }

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.5] - 2025-12-30
+
+### Changed
+- **Notification timing**: Desktop notifications now only appear when game starts, not during champion select
+  - Prevents duplicate notifications for the same lobby
+  - Notifications still show when reconnecting to an in-progress game
+  - ChampSelect analysis still runs normally (visible in app), just without notifications
+
 ## [1.8.4] - 2025-12-30
 
 ### Fixed

@@ -1,6 +1,6 @@
 {
   "name": "rift-revealer",
-  "version": "1.8.4",
+  "version": "1.8.5",
   "description": "Rift Revealer - League of Legends lobby analyzer",
   "main": "src/main.js",
   "scripts": {
