@@ -849,8 +849,8 @@ function showPlayerDetectionNotification(analysis) {
       // If player has no tags, show notification
       if (tags.length === 0) return true;
 
-      // Check if any of their tags are enabled for notifications
-      return tags.some(tag => {
+      // Check if ALL tags are enabled for notifications (hide if ANY tag is disabled)
+      return tags.every(tag => {
         switch (tag.tag_type) {
           case 'toxic': return config.notify_toxic === 1;
           case 'weak': return config.notify_weak === 1;
