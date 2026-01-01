@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.7] - 2025-12-30
+
+### Fixed
+- **Stale lobby data in anonymized queues**: Fixed issue where players from previous game were shown in Ranked Solo/Duo ChampSelect
+  - App now properly clears lobby data when entering anonymized queues (Ranked Solo/Duo)
+  - Prevents displaying old Flex/ARAM players when names are hidden
+  - UI correctly shows "waiting for names" state until game starts
+
 ## [1.8.6] - 2025-12-30
 
 ### Fixed
