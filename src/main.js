@@ -1332,6 +1332,16 @@ async function startGameflowMonitor() {
             } finally {
               analysisInProgress = false; // Always release lock
             }
+          } else if (!hasIdentifiablePlayers && lastAnalyzedPlayers) {
+            // Anonymized queue with no identifiable players - clear previous lobby data
+            console.log(`  ChampSelect: Clearing previous lobby data (anonymized queue: ${queueName})`);
+            lastAnalyzedPlayers = null;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('lobby-update', {
+                success: true,
+                data: { analysis: [] }
+              });
+            }
           } else if (analysisInProgress) {
             console.log(`  ChampSelect: Skipping analysis - already in progress`);
           }
