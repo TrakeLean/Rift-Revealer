@@ -1289,6 +1289,11 @@ async function startGameflowMonitor() {
           if (mainWindow && !mainWindow.isDestroyed()) {
             const queueId = gameflowSession?.queue?.id || gameflowSession?.gameData?.queue?.id || 0;
             const queueName = getQueueName(queueId);
+            // Clear UI to remove previous game's players
+            mainWindow.webContents.send('lobby-update', {
+              success: true,
+              data: { analysis: [] }
+            });
             mainWindow.webContents.send('gameflow-status', {
               state: currentGameflowState,
               message:
