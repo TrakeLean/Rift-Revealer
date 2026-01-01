@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.8] - 2025-12-30
+
+### Fixed
+- **Notification tag filter logic**: Corrected notification filtering to work as intended
+  - Changed from "notify only if player has enabled tags" to "notify all players except those with disabled tags"
+  - Disabling a tag type (e.g., "Duo") now properly prevents notifications for players with that tag
+  - All other known players will still trigger notifications as expected
+
 ## [1.8.7] - 2025-12-30
 
 ### Fixed
