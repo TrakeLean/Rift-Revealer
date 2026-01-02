@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.9] - 2026-01-02
+
+### Fixed
+- **Stale player data between games**: Fixed issue where previous game's players were shown in new lobby/ChampSelect
+  - UI now properly clears when entering Lobby, Matchmaking, or ReadyCheck states
+  - Prevents old player data from persisting across different games
+  - Players from new lobby will only appear once analysis completes
+
 ## [1.8.8] - 2025-12-30
 
 ### Fixed
